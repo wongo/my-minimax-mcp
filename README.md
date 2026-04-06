@@ -47,25 +47,34 @@ Create `.env`:
 MINIMAX_API_KEY=your_api_key_here
 ```
 
-### 3. Register in Claude Code
+### 3. Build & Register in Claude Code
 
-Add to `~/.claude/settings.json`:
+```bash
+npm run build
+```
+
+Register the MCP server:
+
+```bash
+claude mcp add --transport stdio --scope user minimax -- bash /path/to/minimax-mcp/run-mcp.sh
+```
+
+Or manually edit `~/.claude.json`:
 
 ```json
 {
   "mcpServers": {
     "minimax": {
-      "command": "npx",
-      "args": ["tsx", "/path/to/minimax-mcp/src/mcp-server.ts"],
-      "env": {
-        "DOTENV_CONFIG_PATH": "/path/to/minimax-mcp/.env"
-      }
+      "command": "bash",
+      "args": ["/path/to/minimax-mcp/run-mcp.sh"]
     }
   }
 }
 ```
 
-Restart Claude Code. The 5 tools will appear automatically.
+> **Note**: MCP servers must be registered in `~/.claude.json` (not `~/.claude/settings.json`). Use `claude mcp add` for the correct setup.
+
+Restart Claude Code. The 5 tools will appear automatically. Verify with `claude mcp list`.
 
 ## CLI (for debugging)
 
@@ -115,6 +124,29 @@ MiniMax API pricing (per 1M tokens):
 | M2.7 | $0.30 | $1.20 | Complex reasoning |
 
 Typical task cost: **~$0.04** (agent loop with 10 iterations).
+
+### Verified Test Results
+
+Full integration test (11 MCP calls, 10 tests):
+
+```
+Total cost:   $0.012 (1.2 cents)
+Input tokens: 38,913
+Output tokens: 7,228
+```
+
+| Test | Result |
+|------|--------|
+| API connectivity | PASS |
+| Code generation | PASS |
+| Agent loop (autonomous bug fix) | PASS |
+| Structured planning (JSON) | PASS |
+| Multi-turn conversation | PASS |
+| Cost tracking | PASS |
+| Multi-file task (todo module) | PASS |
+| Security (dangerous cmd blocked) | PASS |
+| Routing (Opus → MiniMax, not Sonnet) | PASS |
+| Graceful failure (max iterations) | PASS |
 
 ## Project Structure
 
