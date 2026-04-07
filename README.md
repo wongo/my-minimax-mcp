@@ -1,4 +1,4 @@
-# minimax-mcp
+# my-minimax-mcp
 
 MCP server that wraps [MiniMax AI](https://platform.minimax.io) as an autonomous code executor for Claude Code.
 
@@ -37,8 +37,8 @@ Sign up at [platform.minimax.io](https://platform.minimax.io) and create an API 
 ### 2. Install & Configure
 
 ```bash
-git clone https://github.com/wongo/minimax-mcp.git
-cd minimax-mcp
+git clone https://github.com/wongo/my-minimax-mcp.git
+cd my-minimax-mcp
 npm install
 ```
 
@@ -56,7 +56,7 @@ npm run build
 Register the MCP server:
 
 ```bash
-claude mcp add --transport stdio --scope user minimax -- bash /path/to/minimax-mcp/run-mcp.sh
+claude mcp add --transport stdio --scope user minimax -- bash /path/to/my-minimax-mcp/run-mcp.sh
 ```
 
 Or manually edit `~/.claude.json`:
@@ -66,7 +66,7 @@ Or manually edit `~/.claude.json`:
   "mcpServers": {
     "minimax": {
       "command": "bash",
-      "args": ["/path/to/minimax-mcp/run-mcp.sh"]
+      "args": ["/path/to/my-minimax-mcp/run-mcp.sh"]
     }
   }
 }

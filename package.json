@@ -1,11 +1,11 @@
 {
-  "name": "minimax",
+  "name": "my-minimax-mcp",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "type": "module",
   "bin": {
-    "minimax-mcp": "./dist/mcp-server.js"
+    "my-minimax-mcp": "./dist/mcp-server.js"
   },
   "files": [
     "dist/",

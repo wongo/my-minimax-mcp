@@ -70,7 +70,7 @@ function parseArgs(argv: string[]): {
 
 function printHelp(): void {
   console.log(`
-minimax-mcp CLI
+my-minimax-mcp CLI
 
 Usage:
   npx tsx src/cli.ts --task "description" [options]

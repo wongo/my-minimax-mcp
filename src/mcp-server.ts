@@ -48,7 +48,7 @@ const conversationStore = new ConversationStore();
 const costTracker = new CostTracker(costLogPath);
 
 const server = new McpServer({
-  name: "minimax",
+  name: "my-minimax-mcp",
   version: "1.0.0",
 });
 
