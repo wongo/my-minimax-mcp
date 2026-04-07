@@ -2,6 +2,13 @@ import OpenAI from "openai";
 import type { ChatMessage, ChatOptions, ChatResponse, ChatWithToolsOptions, ModelId, TokenUsage } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://api.minimax.io/v1";
+const DEFAULT_MAX_TOKENS = 65536;
+
+/** Strip MiniMax's <think>...</think> reasoning tags from response content */
+function stripThinkTags(content: string | null): string | null {
+  if (!content) return content;
+  return content.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim() || null;
+}
 
 export class MiniMaxClient {
   private client: OpenAI;
@@ -22,13 +29,13 @@ export class MiniMaxClient {
       model,
       messages: messages.map(m => this.toOpenAIMessage(m)),
       temperature: options.temperature ?? 0.7,
-      max_completion_tokens: options.maxTokens ?? 4096,
+      max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
       ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
     });
 
     const choice = response.choices[0];
     return {
-      content: choice?.message?.content ?? null,
+      content: stripThinkTags(choice?.message?.content ?? null),
       toolCalls: [],
       usage: this.extractUsage(response.usage),
       finishReason: choice?.finish_reason ?? "unknown",
@@ -52,7 +59,7 @@ export class MiniMaxClient {
       messages: messages.map(m => this.toOpenAIMessage(m)),
       tools,
       temperature: options.temperature ?? 0.7,
-      max_completion_tokens: options.maxTokens ?? 4096,
+      max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
     });
 
     const choice = response.choices[0];
@@ -68,7 +75,7 @@ export class MiniMaxClient {
       }));
 
     return {
-      content: choice?.message?.content ?? null,
+      content: stripThinkTags(choice?.message?.content ?? null),
       toolCalls,
       usage: this.extractUsage(response.usage),
       finishReason: choice?.finish_reason ?? "unknown",

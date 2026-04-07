@@ -75,7 +75,7 @@ export async function runAgentLoop(
     const response = await client.chatWithTools(messages, {
       model,
       tools: AGENT_FUNCTIONS,
-      maxTokens: 4096,
+      maxTokens: 16384,
     });
 
     totalUsage.inputTokens += response.usage.inputTokens;
