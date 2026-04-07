@@ -1,11 +1,11 @@
 {
   "name": "my-minimax-mcp",
   "version": "1.0.0",
-  "description": "",
+  "description": "MCP server wrapping MiniMax AI as autonomous code executor with agent loop for Claude Code",
   "main": "index.js",
   "type": "module",
   "bin": {
-    "my-minimax-mcp": "./dist/mcp-server.js"
+    "my-minimax-mcp": "dist/mcp-server.js"
   },
   "files": [
     "dist/",
@@ -18,9 +18,20 @@
     "cli": "tsx src/cli.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "mcp",
+    "minimax",
+    "claude-code",
+    "ai",
+    "agent",
+    "code-generation"
+  ],
+  "author": "nickweng",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wongo/my-minimax-mcp.git"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.1",

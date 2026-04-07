@@ -28,6 +28,12 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 | `minimax_plan` | Structured implementation plan as JSON | M2.7 |
 | `minimax_cost_report` | Session token usage and cost breakdown | — |
 
+## Installation
+
+```bash
+npm install my-minimax-mcp
+```
+
 ## Setup
 
 ### 1. Get a MiniMax API Key
@@ -36,24 +42,28 @@ Sign up at [platform.minimax.io](https://platform.minimax.io) and create an API 
 
 ### 2. Install & Configure
 
+**Option A: Via npm (recommended)**
+
+```bash
+npm install my-minimax-mcp
+```
+
+**Option B: From source**
+
 ```bash
 git clone https://github.com/wongo/my-minimax-mcp.git
 cd my-minimax-mcp
 npm install
+npm run build
 ```
 
-Create `.env`:
+### 3. Create `.env`
+
 ```
 MINIMAX_API_KEY=your_api_key_here
 ```
 
-### 3. Build & Register in Claude Code
-
-```bash
-npm run build
-```
-
-Register the MCP server:
+### 4. Register in Claude Code
 
 ```bash
 claude mcp add --transport stdio --scope user minimax -- bash /path/to/my-minimax-mcp/run-mcp.sh
