@@ -103,6 +103,11 @@ All settings via environment variables:
 | `MINIMAX_WORKING_DIR` | Working directory for file operations | `process.cwd()` |
 | `MINIMAX_COST_LOG` | Cost log file path | `~/.claude/minimax-costs.log` |
 
+## Features
+
+- **Max output**: 65,536 tokens per response (~10,000 Chinese characters / ~50K English words)
+- **Think tag stripping**: MiniMax `<think>...</think>` reasoning tags are automatically removed from all responses
+
 ## Security
 
 The agent loop runs with strict sandboxing:
