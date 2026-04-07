@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MiniMaxClient } from "../client/minimax-client.js";
 import type { ModelId } from "../client/types.js";
 import { CostTracker } from "../utils/cost-tracker.js";
-import { runAgentLoop } from "../agent/loop.js";
+import { runAgentLoop, type OnProgressCallback } from "../agent/loop.js";
 
 export const agentTaskSchema = z.object({
   task: z.string().describe("Full description of the task for the agent to complete autonomously"),
@@ -18,6 +18,7 @@ export async function agentTask(
   client: MiniMaxClient,
   costTracker: CostTracker,
   input: AgentTaskInput,
+  onProgress?: OnProgressCallback,
 ): Promise<string> {
   const model = (input.model ?? "MiniMax-M2.5") as ModelId;
 
@@ -27,6 +28,7 @@ export async function agentTask(
     model,
     maxIterations: input.maxIterations,
     systemPrompt: input.systemPrompt,
+    onProgress,
   });
 
   await costTracker.record("agent_task", model, result.tokensUsed);

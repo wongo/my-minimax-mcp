@@ -5,12 +5,22 @@ import { AGENT_FUNCTIONS } from "./functions.js";
 import { FunctionExecutor } from "./executor.js";
 import { type SafetyConfig, getDefaultSafetyConfig } from "./safety.js";
 
+export interface ProgressInfo {
+  iteration: number;
+  maxIterations: number;
+  lastAction: string;
+  message: string;
+}
+
+export type OnProgressCallback = (info: ProgressInfo) => Promise<void>;
+
 export interface AgentTaskOptions {
   task: string;
   workingDirectory: string;
   model?: ModelId;
   maxIterations?: number;
   systemPrompt?: string;
+  onProgress?: OnProgressCallback;
 }
 
 export interface AgentTaskResult {
@@ -81,6 +91,18 @@ export async function runAgentLoop(
     totalUsage.inputTokens += response.usage.inputTokens;
     totalUsage.outputTokens += response.usage.outputTokens;
     iterations++;
+
+    // Report progress
+    if (options.onProgress) {
+      const actions = response.toolCalls.map(tc => tc.function.name);
+      const lastAction = actions.length > 0 ? actions.join(", ") : "thinking";
+      await options.onProgress({
+        iteration: iterations,
+        maxIterations: config.maxIterations,
+        lastAction,
+        message: `Iteration ${iterations}/${config.maxIterations}: ${lastAction}`,
+      });
+    }
 
     // Check token budget
     if (totalUsage.inputTokens > config.maxInputTokens) {

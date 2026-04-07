@@ -73,20 +73,37 @@ server.tool(
   },
 );
 
-// Tool 2: minimax_agent_task
-server.tool(
+// Tool 2: minimax_agent_task (uses registerTool for progress notifications)
+server.registerTool(
   "minimax_agent_task",
-  "Execute a complete coding task autonomously. MiniMax AI will read files, write code, run tests, and debug in an autonomous loop until the task is complete.",
   {
-    task: z.string().describe("Full description of the task for the agent to complete"),
-    workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
-    model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
-    maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
-    systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
+    description: "Execute a complete coding task autonomously. MiniMax AI will read files, write code, run tests, and debug in an autonomous loop until the task is complete.",
+    inputSchema: {
+      task: z.string().describe("Full description of the task for the agent to complete"),
+      workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
+      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
+      maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
+      systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
+    },
   },
-  async (input) => {
+  async (input, extra) => {
     try {
-      const result = await agentTask(client, costTracker, input);
+      const progressToken = extra._meta?.progressToken;
+      const onProgress = progressToken !== undefined
+        ? async (info: { iteration: number; maxIterations: number; lastAction: string; message: string }) => {
+            await extra.sendNotification({
+              method: "notifications/progress" as const,
+              params: {
+                progressToken,
+                progress: info.iteration,
+                total: info.maxIterations,
+                message: info.message,
+              },
+            });
+          }
+        : undefined;
+
+      const result = await agentTask(client, costTracker, input, onProgress);
       return { content: [{ type: "text", text: result }] };
     } catch (err) {
       return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
