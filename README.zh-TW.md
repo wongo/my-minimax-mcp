@@ -4,7 +4,7 @@
 
 MCP 伺服器，包裝 [MiniMax AI](https://platform.minimax.io) 作為 Claude Code 的自主程式碼執行器。
 
-**用途**：將重型的執行工作（程式碼生成、錯誤修復、測試）從 Claude 的訂閱配額移轉到 MiniMax API — 獨立計費，約 $0.04/任務。
+**用途**：一個典型的程式碼任務中，85% 的 Token 消耗在執行（寫入、測試、除錯），僅 15% 用於規劃。此 MCP 伺服器將那 85% 轉移到 MiniMax API（每任務約 $0.04），讓你的 Claude 訂閱每天可處理 5-7 倍的任務。
 
 ## 架構
 

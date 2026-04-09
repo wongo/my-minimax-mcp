@@ -4,7 +4,7 @@
 
 MCP server that wraps [MiniMax AI](https://platform.minimax.io) as an autonomous code executor for Claude Code.
 
-**Purpose**: Offload heavy executor work (code generation, bug fixing, testing) from Claude's subscription quota to the MiniMax API — independent billing at ~$0.04/task.
+**Purpose**: A typical coding task consumes 85% of tokens on execution (writing, testing, debugging) and only 15% on planning. This MCP server moves that 85% to MiniMax API (~$0.04/task), so your Claude subscription handles 5-7x more tasks per day.
 
 ## Architecture
 
