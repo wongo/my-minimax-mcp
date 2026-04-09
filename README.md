@@ -163,6 +163,18 @@ Output tokens: 7,228
 | Routing (Opus → MiniMax, not Sonnet) | PASS |
 | Graceful failure (max iterations) | PASS |
 
+## Testing
+
+```bash
+# Run all tests (15 tests)
+npm test
+
+# Run with coverage report
+npm run coverage
+```
+
+Unit tests cover safety validation, cost tracking, file writing, and server initialization. Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
+
 ## Project Structure
 
 ```

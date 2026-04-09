@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { CostTracker } from "../src/utils/cost-tracker.ts";
+import { waitForFileLines } from "./helpers.ts";
 
 test("CostTracker aggregates usage, call count, and rounded total cost", async () => {
   const tempDirectory = await mkdtemp(join(tmpdir(), "minimax-cost-tracker-"));
@@ -29,8 +29,7 @@ test("CostTracker aggregates usage, call count, and rounded total cost", async (
   assert.equal(report.totalCost, 0.002413);
   assert.equal(report.breakdown.length, 2);
 
-  await delay(25);
-  const logLines = (await readFile(logPath, "utf-8")).trim().split("\n");
+  const logLines = await waitForFileLines(logPath, 2);
   assert.equal(logLines.length, 2);
 });
 

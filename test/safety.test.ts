@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getDefaultSafetyConfig, validateBashCommand, validateFilePath } from "../src/agent/safety.ts";
+import { withEnv } from "./helpers.ts";
 
 test("validateFilePath allows files inside the working directory", () => {
   const resolved = validateFilePath("src/index.ts", "/tmp/project");
@@ -40,32 +41,19 @@ test("validateBashCommand rejects commands outside the whitelist", () => {
   );
 });
 
-test("getDefaultSafetyConfig reads environment overrides", () => {
-  const originalIterations = process.env.MINIMAX_MAX_ITERATIONS;
-  const originalTimeout = process.env.MINIMAX_TIMEOUT_MS;
-  const originalWhitelist = process.env.MINIMAX_BASH_WHITELIST;
-
-  process.env.MINIMAX_MAX_ITERATIONS = "9";
-  process.env.MINIMAX_TIMEOUT_MS = "1234";
-  process.env.MINIMAX_BASH_WHITELIST = "git status,git diff";
-
-  try {
-    const config = getDefaultSafetyConfig("/tmp/project");
-    assert.equal(config.maxIterations, 9);
-    assert.equal(config.timeoutMs, 1234);
-    assert.equal(config.additionalBashWhitelist.length, 2);
-    assert.doesNotThrow(() => validateBashCommand("git status", config));
-  } finally {
-    restoreEnv("MINIMAX_MAX_ITERATIONS", originalIterations);
-    restoreEnv("MINIMAX_TIMEOUT_MS", originalTimeout);
-    restoreEnv("MINIMAX_BASH_WHITELIST", originalWhitelist);
-  }
+test("getDefaultSafetyConfig reads environment overrides", async () => {
+  await withEnv(
+    {
+      MINIMAX_MAX_ITERATIONS: "9",
+      MINIMAX_TIMEOUT_MS: "1234",
+      MINIMAX_BASH_WHITELIST: "git status,git diff",
+    },
+    () => {
+      const config = getDefaultSafetyConfig("/tmp/project");
+      assert.equal(config.maxIterations, 9);
+      assert.equal(config.timeoutMs, 1234);
+      assert.equal(config.additionalBashWhitelist.length, 2);
+      assert.doesNotThrow(() => validateBashCommand("git status", config));
+    },
+  );
 });
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name];
-    return;
-  }
-  process.env[name] = value;
-}
