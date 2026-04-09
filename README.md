@@ -1,5 +1,7 @@
 # my-minimax-mcp
 
+[English](README.md) | [繁體中文](README.zh-TW.md)
+
 MCP server that wraps [MiniMax AI](https://platform.minimax.io) as an autonomous code executor for Claude Code.
 
 **Purpose**: Offload heavy executor work (code generation, bug fixing, testing) from Claude's subscription quota to the MiniMax API — independent billing at ~$0.04/task.
