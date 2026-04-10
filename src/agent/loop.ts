@@ -49,6 +49,32 @@ Important:
 - Make minimal, focused changes
 - Do not modify files unrelated to the task`;
 
+function describeToolCall(name: string, argsJson: string): string {
+  try {
+    const args = JSON.parse(argsJson) as Record<string, unknown>;
+    switch (name) {
+      case "read_file":
+      case "write_file":
+      case "edit_file":
+        return `${name} → ${args.path}`;
+      case "run_bash":
+        return `${name} → ${(args.command as string).slice(0, 80)}`;
+      case "list_files":
+        return `${name} → ${args.pattern ?? args.path ?? "."}`;
+      case "search_content":
+        return `${name} → ${args.pattern}`;
+      case "task_complete":
+        return "task_complete";
+      case "task_failed":
+        return "task_failed";
+      default:
+        return name;
+    }
+  } catch {
+    return name;
+  }
+}
+
 export async function runAgentLoop(
   client: MiniMaxClient,
   options: AgentTaskOptions,
@@ -92,15 +118,13 @@ export async function runAgentLoop(
     totalUsage.outputTokens += response.usage.outputTokens;
     iterations++;
 
-    // Report progress
+    // Report iteration start
     if (options.onProgress) {
-      const actions = response.toolCalls.map(tc => tc.function.name);
-      const lastAction = actions.length > 0 ? actions.join(", ") : "thinking";
       await options.onProgress({
         iteration: iterations,
         maxIterations: config.maxIterations,
-        lastAction,
-        message: `Iteration ${iterations}/${config.maxIterations}: ${lastAction}`,
+        lastAction: "thinking",
+        message: `Iteration ${iterations}/${config.maxIterations}: executing ${response.toolCalls.length} tool call(s)`,
       });
     }
 
@@ -139,6 +163,16 @@ export async function runAgentLoop(
 
     // Execute each tool call
     for (const toolCall of response.toolCalls) {
+      if (options.onProgress) {
+        const stepDesc = describeToolCall(toolCall.function.name, toolCall.function.arguments);
+        await options.onProgress({
+          iteration: iterations,
+          maxIterations: config.maxIterations,
+          lastAction: stepDesc,
+          message: `Iteration ${iterations}/${config.maxIterations}: ${stepDesc}`,
+        });
+      }
+
       let result: string;
       try {
         const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
