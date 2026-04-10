@@ -29,6 +29,7 @@ Claude Code (Opus) ─── orchestrator
 | `minimax_chat` | 多輪對話，保留上下文 | M2.7 |
 | `minimax_plan` | 結構化實作計畫 (JSON 格式) | M2.7 |
 | `minimax_cost_report` | 工作階段權杖使用量和費用明細 | — |
+| `minimax_session_tracker` | 跨 session 使用率追蹤，自我改善模式 | — |
 
 ## 安裝
 
@@ -71,22 +72,34 @@ MINIMAX_API_KEY=your_api_key_here
 claude mcp add --transport stdio --scope user minimax -- bash /path/to/my-minimax-mcp/run-mcp.sh
 ```
 
-或手動編輯 `~/.claude.json`：
+或手動編輯 `~/.claude/settings.json`：
 
 ```json
 {
   "mcpServers": {
     "minimax": {
-      "command": "bash",
-      "args": ["/path/to/my-minimax-mcp/run-mcp.sh"]
+      "command": "npx",
+      "args": ["my-minimax-mcp"],
+      "env": {
+        "MINIMAX_API_KEY": "your-api-key",
+        "MINIMAX_DEFAULT_MODEL": "MiniMax-M2.7"
+      }
     }
   }
 }
 ```
 
-> **注意**：MCP 伺服器必須註冊在 `~/.claude.json`（不是 `~/.claude/settings.json`）。請使用 `claude mcp add` 進行正確的設定。
+> **注意**：使用 `claude mcp add` 是最簡單的設定方式，或直接編輯 `~/.claude/settings.json`。
 
-重新啟動 Claude Code。5 個工具將會自動出現。使用 `claude mcp list` 驗證。
+重新啟動 Claude Code。6 個工具將會自動出現。使用 `claude mcp list` 驗證。
+
+### 5. 啟用自我改善迴路（選用）
+
+```bash
+npx my-minimax-mcp --init
+```
+
+這會顯示 CLAUDE.md 模板並建立使用率記錄檔。將模板複製到 `~/.claude/CLAUDE.md` 即可啟用自動 session 追蹤、Edit Gate 檢查和執行器路由。詳見 `templates/setup-guide.md`。
 
 ## CLI（用於除錯）
 
@@ -114,6 +127,23 @@ npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-projec
 | `MINIMAX_BASH_WHITELIST` | 允許的額外 bash 命令（逗號分隔） | — |
 | `MINIMAX_WORKING_DIR` | 檔案操作的工作目錄 | `process.cwd()` |
 | `MINIMAX_COST_LOG` | 費用日誌檔案路徑 | `~/.claude/minimax-costs.log` |
+| `MINIMAX_USAGE_LOG` | Session 使用率記錄檔路徑 | `~/.claude/minimax-usage.jsonl` |
+| `MINIMAX_SESSION_TARGET` | 每 session 最低 MiniMax 呼叫數 | `5` |
+
+## 自我改善迴路
+
+`minimax_session_tracker` 工具可自動追蹤跨 session 的使用率：
+
+1. **Session 開始**：呼叫 `command: "start"` — 根據歷史記錄回傳當前模式（normal/warning/forced）
+2. **Session 中途**：呼叫 `command: "status"` — 檢查進度 vs 目標
+3. **Session 結束**：呼叫 `command: "end"` — 將 session 數據記錄到持久化 log
+
+**模式：**
+- **Normal**：目標為每 session 5+ MiniMax 呼叫
+- **Warning**：上次 session 未達標 — 優先使用 MiniMax
+- **Forced**：連續 2 次未達標 — 所有程式碼修改必須使用 MiniMax
+
+將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。工具 schema 列出所有 4 個模型（M2.5、M2.7、M2.5-highspeed、M2.7-highspeed）；不在你 plan 範圍的模型，API 會自動拒絕。
 
 ## 功能
 
@@ -168,14 +198,14 @@ MiniMax API 定價（每 1M 權杖）：
 ## 測試
 
 ```bash
-# 執行所有測試（15 項測試）
+# 執行所有測試（25 項測試）
 npm test
 
 # 產生覆蓋率報告
 npm run coverage
 ```
 
-單元測試涵蓋安全驗證、費用追蹤、檔案寫入和伺服器初始化。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
+單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化和 session 追蹤。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
 
 ## 專案結構
 

@@ -1,6 +1,6 @@
 {
   "name": "my-minimax-mcp",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "MCP server wrapping MiniMax AI as autonomous code executor with agent loop for Claude Code",
   "main": "index.js",
   "type": "module",
@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/",
+    "templates/",
     "README.md",
     "LICENSE"
   ],
@@ -16,8 +17,8 @@
     "build": "tsc",
     "dev": "tsx src/mcp-server.ts",
     "cli": "tsx src/cli.ts",
-    "test": "node --import tsx --test test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts",
-    "coverage": "node --import tsx --test --experimental-test-coverage test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts"
+    "test": "node --import tsx --test test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts test/session-tracker.test.ts",
+    "coverage": "node --import tsx --test --experimental-test-coverage test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts test/session-tracker.test.ts"
   },
   "keywords": [
     "mcp",

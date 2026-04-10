@@ -1,9 +1,21 @@
 import "dotenv/config";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { MiniMaxClient } from "./client/minimax-client.js";
 import type { ModelId } from "./client/types.js";
 import { calculateCost } from "./client/types.js";
 import { CostTracker } from "./utils/cost-tracker.js";
 import { runAgentLoop } from "./agent/loop.js";
+
+const __cliDirname = dirname(fileURLToPath(import.meta.url));
+
+// Handle --init before requiring API key
+if (process.argv.includes("--init")) {
+  runInit();
+  process.exit(0);
+}
 
 const apiKey = process.env.MINIMAX_API_KEY;
 if (!apiKey) {
@@ -22,7 +34,7 @@ function parseArgs(argv: string[]): {
   const args = argv.slice(2);
   let mode: "chat" | "generate" | "agent" = "generate";
   let task = "";
-  let model: ModelId = "MiniMax-M2.5";
+  let model: ModelId = "MiniMax-M2.7";
   let language = "typescript";
   let workingDir = process.cwd();
 
@@ -73,20 +85,23 @@ function printHelp(): void {
 my-minimax-mcp CLI
 
 Usage:
-  npx tsx src/cli.ts --task "description" [options]
+  npx my-minimax-mcp --task "description" [options]
+  npx my-minimax-mcp --init
 
 Options:
-  --task, -t     Task description (required)
+  --task, -t     Task description (required for generate/chat/agent)
   --mode         Mode: generate | chat | agent (default: generate)
-  --model, -m    Model: MiniMax-M2.5 | MiniMax-M2.7 (default: MiniMax-M2.5)
+  --model, -m    Model: MiniMax-M2.5 | MiniMax-M2.7 (default: MiniMax-M2.7)
   --language, -l Language for code generation (default: typescript)
   --dir, -d      Working directory for agent mode (default: cwd)
+  --init         Set up Self-Improvement Loop (CLAUDE.md template + usage log)
   --help, -h     Show this help
 
 Examples:
-  npx tsx src/cli.ts --task "hello world in Python" --language python
-  npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-project
-  npx tsx src/cli.ts --mode chat --task "explain async/await in TypeScript"
+  npx my-minimax-mcp --init
+  npx my-minimax-mcp --task "hello world in Python" --language python
+  npx my-minimax-mcp --mode agent --task "fix the failing tests" --dir ./my-project
+  npx my-minimax-mcp --mode chat --task "explain async/await in TypeScript"
 `);
 }
 
@@ -137,6 +152,40 @@ async function main() {
     console.log(`\nTokens: ${response.usage.inputTokens} in / ${response.usage.outputTokens} out`);
     console.log(`Cost: $${calculateCost(response.usage, model).toFixed(6)}`);
   }
+}
+
+function runInit(): void {
+  console.log("my-minimax-mcp — Self-Improvement Loop Setup\n");
+
+  // Show template location
+  const templatePath = resolve(__cliDirname, "..", "templates", "CLAUDE.md");
+  if (existsSync(templatePath)) {
+    console.log(`CLAUDE.md template: ${templatePath}`);
+    console.log("Copy this to ~/.claude/CLAUDE.md or your project's CLAUDE.md\n");
+    console.log("--- Template Preview ---");
+    const content = readFileSync(templatePath, "utf-8");
+    const lines = content.split("\n").slice(0, 20);
+    console.log(lines.join("\n"));
+    console.log("...\n");
+  } else {
+    console.log("Template not found at expected location.");
+    console.log("Find templates/ in the installed package directory.\n");
+  }
+
+  // Create usage log if needed
+  const usageLog = resolve(homedir(), ".claude", "minimax-usage.jsonl");
+  const claudeDir = dirname(usageLog);
+  if (!existsSync(claudeDir)) {
+    mkdirSync(claudeDir, { recursive: true });
+  }
+  if (!existsSync(usageLog)) {
+    writeFileSync(usageLog, "");
+    console.log(`Created usage log: ${usageLog}`);
+  } else {
+    console.log(`Usage log exists: ${usageLog}`);
+  }
+
+  console.log("\nSetup complete. Restart Claude Code to activate.");
 }
 
 main().catch((err) => {

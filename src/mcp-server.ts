@@ -10,6 +10,7 @@ import { MiniMaxClient } from "./client/minimax-client.js";
 import type { ModelId } from "./client/types.js";
 import { ConversationStore } from "./conversation/store.js";
 import { CostTracker } from "./utils/cost-tracker.js";
+import { SessionTracker } from "./utils/session-tracker.js";
 import { generateCode } from "./tools/generate-code.js";
 import { agentTask } from "./tools/agent-task.js";
 import { chat } from "./tools/chat.js";
@@ -157,6 +158,41 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
     },
   );
 
+  const usageLogPath = env.MINIMAX_USAGE_LOG || undefined;
+  const sessionTarget = Number(env.MINIMAX_SESSION_TARGET) || 5;
+  const sessionTracker = new SessionTracker(usageLogPath, sessionTarget);
+
+  server.tool(
+    "minimax_session_tracker",
+    "Track MiniMax usage across sessions for self-improvement. Call with 'start' at session begin, 'end' at session close, 'status' anytime.",
+    {
+      command: z.enum(["start", "end", "status"]).describe("start: check mode at session begin; end: record session result; status: mid-session progress"),
+      notes: z.string().optional().describe("For 'end' command: root cause analysis if target not met"),
+    },
+    async (input) => {
+      try {
+        switch (input.command) {
+          case "start": {
+            const result = await sessionTracker.start();
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          }
+          case "end": {
+            const report = costTracker.getReport();
+            const result = await sessionTracker.end(report.callCount, report.totalCost, input.notes);
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          }
+          case "status": {
+            const report = costTracker.getReport();
+            const result = await sessionTracker.status(report.callCount);
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          }
+        }
+      } catch (err) {
+        return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
   return server;
 }
 
@@ -168,8 +204,15 @@ async function main() {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  main().catch((err) => {
-    console.error("Failed to start MCP server:", err);
-    process.exit(1);
-  });
+  if (process.argv.includes("--init")) {
+    import("./cli.js").catch((err) => {
+      console.error("Failed to run init:", err);
+      process.exit(1);
+    });
+  } else {
+    main().catch((err) => {
+      console.error("Failed to start MCP server:", err);
+      process.exit(1);
+    });
+  }
 }

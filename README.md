@@ -29,6 +29,7 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 | `minimax_chat` | Multi-turn conversation with context preservation | M2.7 |
 | `minimax_plan` | Structured implementation plan as JSON | M2.7 |
 | `minimax_cost_report` | Session token usage and cost breakdown | — |
+| `minimax_session_tracker` | Cross-session usage tracking with self-improvement modes | — |
 
 ## Installation
 
@@ -71,22 +72,34 @@ MINIMAX_API_KEY=your_api_key_here
 claude mcp add --transport stdio --scope user minimax -- bash /path/to/my-minimax-mcp/run-mcp.sh
 ```
 
-Or manually edit `~/.claude.json`:
+Or manually edit `~/.claude/settings.json`:
 
 ```json
 {
   "mcpServers": {
     "minimax": {
-      "command": "bash",
-      "args": ["/path/to/my-minimax-mcp/run-mcp.sh"]
+      "command": "npx",
+      "args": ["my-minimax-mcp"],
+      "env": {
+        "MINIMAX_API_KEY": "your-api-key",
+        "MINIMAX_DEFAULT_MODEL": "MiniMax-M2.7"
+      }
     }
   }
 }
 ```
 
-> **Note**: MCP servers must be registered in `~/.claude.json` (not `~/.claude/settings.json`). Use `claude mcp add` for the correct setup.
+> **Note**: Use `claude mcp add` for the simplest setup, or edit `~/.claude/settings.json` directly.
 
-Restart Claude Code. The 5 tools will appear automatically. Verify with `claude mcp list`.
+Restart Claude Code. The 6 tools will appear automatically. Verify with `claude mcp list`.
+
+### 5. Enable Self-Improvement Loop (Optional)
+
+```bash
+npx my-minimax-mcp --init
+```
+
+This displays the CLAUDE.md template and creates the usage log. Copy the template to `~/.claude/CLAUDE.md` to enable automatic session tracking, edit gate checks, and executor routing. See `templates/setup-guide.md` for details.
 
 ## CLI (for debugging)
 
@@ -114,6 +127,23 @@ All settings via environment variables:
 | `MINIMAX_BASH_WHITELIST` | Additional allowed bash commands (comma-separated) | — |
 | `MINIMAX_WORKING_DIR` | Working directory for file operations | `process.cwd()` |
 | `MINIMAX_COST_LOG` | Cost log file path | `~/.claude/minimax-costs.log` |
+| `MINIMAX_USAGE_LOG` | Session usage log path | `~/.claude/minimax-usage.jsonl` |
+| `MINIMAX_SESSION_TARGET` | Min MiniMax calls per session | `5` |
+
+## Self-Improvement Loop
+
+The `minimax_session_tracker` tool enables automatic usage tracking across sessions:
+
+1. **Session Start**: Call with `command: "start"` — returns current mode (normal/warning/forced) based on recent history
+2. **Mid-Session**: Call with `command: "status"` — check progress vs target
+3. **Session End**: Call with `command: "end"` — records session data to persistent log
+
+**Modes:**
+- **Normal**: Target is 5+ MiniMax calls per session
+- **Warning**: Last session missed target — prioritize MiniMax
+- **Forced**: 2 consecutive misses — all code changes must use MiniMax
+
+Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. The tool schema lists all 4 models (M2.5, M2.7, M2.5-highspeed, M2.7-highspeed); the API will reject models not available on your plan.
 
 ## Features
 
@@ -168,14 +198,14 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (15 tests)
+# Run all tests (25 tests)
 npm test
 
 # Run with coverage report
 npm run coverage
 ```
 
-Unit tests cover safety validation, cost tracking, file writing, and server initialization. Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
+Unit tests cover safety validation, cost tracking, file writing, server initialization, and session tracking. Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
 
 ## Project Structure
 
