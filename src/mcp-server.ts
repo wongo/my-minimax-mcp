@@ -40,7 +40,7 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
     throw new Error("MINIMAX_API_KEY environment variable is required");
   }
 
-  const defaultModel = (env.MINIMAX_DEFAULT_MODEL ?? "MiniMax-M2.5") as ModelId;
+  const defaultModel = (env.MINIMAX_DEFAULT_MODEL ?? "MiniMax-M2.7") as ModelId;
   const costLogPath = env.MINIMAX_COST_LOG || undefined;
   const workingDirectory = env.MINIMAX_WORKING_DIR || process.cwd();
 

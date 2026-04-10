@@ -24,8 +24,8 @@ Claude Code (Opus) ─── orchestrator
 
 | 工具 | 描述 | 預設模型 |
 |------|-------------|---------------|
-| `minimax_agent_task` | 自主程式碼開發：讀取檔案、寫入程式碼、執行測試、偵錯迴圈 | M2.5 |
-| `minimax_generate_code` | 生成程式碼，可選擇寫入檔案 | M2.5 |
+| `minimax_agent_task` | 自主程式碼開發：讀取檔案、寫入程式碼、執行測試、偵錯迴圈 | M2.7 |
+| `minimax_generate_code` | 生成程式碼，可選擇寫入檔案 | M2.7 |
 | `minimax_chat` | 多輪對話，保留上下文 | M2.7 |
 | `minimax_plan` | 結構化實作計畫 (JSON 格式) | M2.7 |
 | `minimax_cost_report` | 工作階段權杖使用量和費用明細 | — |
@@ -108,7 +108,7 @@ npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-projec
 | 變數 | 描述 | 預設值 |
 |----------|-------------|---------|
 | `MINIMAX_API_KEY` | API 金鑰（必填） | — |
-| `MINIMAX_DEFAULT_MODEL` | 預設模型 | `MiniMax-M2.5` |
+| `MINIMAX_DEFAULT_MODEL` | 預設模型 | `MiniMax-M2.7` |
 | `MINIMAX_MAX_ITERATIONS` | 代理迴圈最大迭代次數 | `25` |
 | `MINIMAX_TIMEOUT_MS` | 每任務超時時間 | `300000` (5分鐘) |
 | `MINIMAX_BASH_WHITELIST` | 允許的額外 bash 命令（逗號分隔） | — |

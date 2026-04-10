@@ -24,8 +24,8 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 
 | Tool | Description | Default Model |
 |------|-------------|---------------|
-| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop | M2.5 |
-| `minimax_generate_code` | Generate code, optionally write to file | M2.5 |
+| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop | M2.7 |
+| `minimax_generate_code` | Generate code, optionally write to file | M2.7 |
 | `minimax_chat` | Multi-turn conversation with context preservation | M2.7 |
 | `minimax_plan` | Structured implementation plan as JSON | M2.7 |
 | `minimax_cost_report` | Session token usage and cost breakdown | — |
@@ -108,7 +108,7 @@ All settings via environment variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `MINIMAX_API_KEY` | API key (required) | — |
-| `MINIMAX_DEFAULT_MODEL` | Default model | `MiniMax-M2.5` |
+| `MINIMAX_DEFAULT_MODEL` | Default model | `MiniMax-M2.7` |
 | `MINIMAX_MAX_ITERATIONS` | Agent loop max iterations | `25` |
 | `MINIMAX_TIMEOUT_MS` | Per-task timeout | `300000` (5min) |
 | `MINIMAX_BASH_WHITELIST` | Additional allowed bash commands (comma-separated) | — |
