@@ -1,6 +1,6 @@
 {
   "name": "my-minimax-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server wrapping MiniMax AI as autonomous code executor with agent loop for Claude Code",
   "main": "index.js",
   "type": "module",
