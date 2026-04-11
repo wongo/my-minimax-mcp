@@ -46,7 +46,27 @@ npx my-minimax-mcp --init
 
 Or manually copy to `~/.claude/CLAUDE.md` (global) or your project's CLAUDE.md.
 
-## 5. Verify
+## 5. (Optional) Add SessionEnd Hook
+
+For fully automatic session tracking without any AI intervention:
+
+```json
+{
+  "hooks": {
+    "SessionEnd": [{
+      "hooks": [{
+        "type": "command",
+        "command": "npx my-minimax-mcp --end-session",
+        "timeout": 10
+      }]
+    }]
+  }
+}
+```
+
+Add this to your `~/.claude/settings.json`.
+
+## 6. Verify
 
 Restart Claude Code and verify:
 
@@ -54,7 +74,7 @@ Restart Claude Code and verify:
 claude mcp list  # Should show "minimax" with 6 tools
 ```
 
-In your first session, Claude should automatically call `minimax_session_tracker start`.
+Session tracking is automatic — the MCP server persists usage data on shutdown.
 
 ## Environment Variables
 

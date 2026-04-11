@@ -1,6 +1,7 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -35,7 +36,11 @@ export function loadEnvFile(envPath = process.env.DOTENV_CONFIG_PATH ?? resolve(
   }
 }
 
-export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
+export function createServer(
+  env: NodeJS.ProcessEnv = process.env,
+  externalCostTracker?: CostTracker,
+  externalSessionTracker?: SessionTracker,
+): McpServer {
   const apiKey = env.MINIMAX_API_KEY;
   if (!apiKey) {
     throw new Error("MINIMAX_API_KEY environment variable is required");
@@ -47,11 +52,14 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
 
   const client = new MiniMaxClient(apiKey, defaultModel);
   const conversationStore = new ConversationStore();
-  const costTracker = new CostTracker(costLogPath);
+  const costTracker = externalCostTracker ?? new CostTracker(costLogPath);
+
+  const require = createRequire(import.meta.url);
+  const pkg = require("../package.json") as { version: string };
 
   const server = new McpServer({
     name: "my-minimax-mcp",
-    version: "1.0.0",
+    version: pkg.version,
   });
 
   server.tool(
@@ -61,7 +69,7 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
       task: z.string().describe("Description of the code to generate"),
       language: z.string().describe("Programming language (e.g., typescript, python, go)"),
       filePath: z.string().optional().describe("If provided, write generated code to this file path"),
-      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
+      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       context: z.string().optional().describe("Additional context about the codebase or requirements"),
     },
     async (input) => {
@@ -81,7 +89,7 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
       inputSchema: {
         task: z.string().describe("Full description of the task for the agent to complete"),
         workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
-        model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
+        model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
         maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
         systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
       },
@@ -117,7 +125,7 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
     {
       message: z.string().describe("Message to send to MiniMax"),
       conversationId: z.string().optional().describe("ID of existing conversation to continue"),
-      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.7)"),
+      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       systemPrompt: z.string().optional().describe("System prompt (only for new conversations)"),
     },
     async (input) => {
@@ -136,7 +144,7 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
     {
       task: z.string().describe("Description of the task to plan"),
       codebaseContext: z.string().optional().describe("Context about the codebase"),
-      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.7)"),
+      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
     },
     async (input) => {
       try {
@@ -158,16 +166,21 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
     },
   );
 
-  const usageLogPath = env.MINIMAX_USAGE_LOG || undefined;
-  const sessionTarget = Number(env.MINIMAX_SESSION_TARGET) || 5;
-  const sessionTracker = new SessionTracker(usageLogPath, sessionTarget);
+  const sessionTracker = externalSessionTracker ?? new SessionTracker(
+    env.MINIMAX_USAGE_LOG || undefined,
+    Number(env.MINIMAX_SESSION_TARGET) || 5,
+  );
+  const projectDir = workingDirectory;
 
   server.tool(
     "minimax_session_tracker",
-    "Track MiniMax usage across sessions for self-improvement. Call with 'start' at session begin, 'end' at session close, 'status' anytime.",
+    "Track MiniMax usage across sessions for self-improvement. " +
+    "'start': check mode (auto-called on first tool use if not explicit). " +
+    "'end': record session + optional root cause notes. " +
+    "'status': mid-session progress with trend analytics.",
     {
-      command: z.enum(["start", "end", "status"]).describe("start: check mode at session begin; end: record session result; status: mid-session progress"),
-      notes: z.string().optional().describe("For 'end' command: root cause analysis if target not met"),
+      command: z.enum(["start", "end", "status"]).describe("start: check mode; end: record session; status: progress + trend"),
+      notes: z.string().optional().describe("For 'end': root cause if target missed (required when missing)"),
     },
     async (input) => {
       try {
@@ -178,7 +191,10 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
           }
           case "end": {
             const report = costTracker.getReport();
-            const result = await sessionTracker.end(report.callCount, report.totalCost, input.notes);
+            const result = await sessionTracker.end(
+              report.callCount, report.totalCost, input.notes,
+              costTracker.sessionId, projectDir,
+            );
             return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
           }
           case "status": {
@@ -198,15 +214,56 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
 
 async function main() {
   loadEnvFile();
-  const server = createServer();
+  const env = process.env;
+
+  const costTracker = new CostTracker(env.MINIMAX_COST_LOG || undefined);
+  const sessionTracker = new SessionTracker(
+    env.MINIMAX_USAGE_LOG || undefined,
+    Number(env.MINIMAX_SESSION_TARGET) || 5,
+  );
+  const projectDir = env.MINIMAX_WORKING_DIR || process.cwd();
+
+  // Guard against double persistence (explicit "end" + SIGTERM)
+  let sessionPersisted = false;
+
+  // Wrap the tool's "end" command to set the guard
+  const originalEnd = sessionTracker.end.bind(sessionTracker);
+  sessionTracker.end = async (...args) => {
+    sessionPersisted = true;
+    return originalEnd(...args);
+  };
+
+  // Auto-persist session on shutdown (only if not already persisted)
+  const persistSession = async () => {
+    if (sessionPersisted) return;
+    const report = costTracker.getReport();
+    if (report.callCount > 0) {
+      sessionPersisted = true;
+      await originalEnd(
+        report.callCount, report.totalCost, "auto-persisted on shutdown",
+        costTracker.sessionId, projectDir,
+      );
+    }
+  };
+
+  process.on("SIGTERM", async () => {
+    await persistSession();
+    process.exit(0);
+  });
+  process.on("SIGINT", async () => {
+    await persistSession();
+    process.exit(0);
+  });
+
+  const server = createServer(env, costTracker, sessionTracker);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  if (process.argv.includes("--init")) {
+  if (process.argv.includes("--init") || process.argv.includes("--end-session")) {
     import("./cli.js").catch((err) => {
-      console.error("Failed to run init:", err);
+      console.error("Failed to run CLI command:", err);
       process.exit(1);
     });
   } else {

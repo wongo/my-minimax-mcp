@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 
 export interface SessionEntry {
   date: string;
+  sessionId: string;
+  project: string;
   calls: number;
   cost: number;
   targetMet: boolean;
@@ -11,11 +13,14 @@ export interface SessionEntry {
 }
 
 export type SessionMode = "normal" | "warning" | "forced";
+export type Trend = "improving" | "declining" | "stable" | "insufficient_data";
 
 export interface StartResult {
   mode: SessionMode;
   message: string;
   recentSessions: SessionEntry[];
+  trend: Trend;
+  streak: number;
 }
 
 export interface EndResult {
@@ -28,29 +33,45 @@ export interface StatusResult {
   mode: SessionMode;
   currentCalls: number;
   target: number;
+  dynamicTarget: number;
   onTrack: boolean;
+  trend: Trend;
+  streak: number;
+  insight: string;
 }
 
 const DEFAULT_LOG_PATH = resolve(homedir(), ".claude", "minimax-usage.jsonl");
 
 export class SessionTracker {
   private readonly logPath: string;
-  private readonly target: number;
+  private readonly baseTarget: number;
+  private initialized = false;
+  private cachedMode: SessionMode = "normal";
+  private cachedEntries: SessionEntry[] = [];
 
   constructor(logPath?: string, target: number = 5) {
     this.logPath = logPath ?? DEFAULT_LOG_PATH;
-    this.target = Number.isInteger(target) && target > 0 ? target : 5;
+    this.baseTarget = Number.isInteger(target) && target > 0 ? target : 5;
   }
 
+  /**
+   * Auto-initialize: called internally on first access.
+   * Also callable explicitly via the "start" command.
+   */
   async start(): Promise<StartResult> {
     const entries = await this.readLog();
+    this.cachedEntries = entries;
     const mode = this.determineMode(entries);
-    const recent = entries.slice(-3);
+    this.cachedMode = mode;
+    this.initialized = true;
+    const recent = entries.slice(-5);
+    const trend = this.calculateTrend(entries);
+    const streak = this.calculateStreak(entries);
 
     let message: string;
     switch (mode) {
       case "normal":
-        message = `Session started. Mode: normal. Target: ≥${this.target} MiniMax calls.`;
+        message = `Session started. Mode: normal. Base target: ≥${this.baseTarget} MiniMax calls.`;
         break;
       case "warning": {
         const last = entries[entries.length - 1];
@@ -62,13 +83,20 @@ export class SessionTracker {
         break;
     }
 
-    return { mode, message, recentSessions: recent };
+    if (streak > 0) {
+      message += ` 🔥 ${streak}-session streak!`;
+    }
+
+    return { mode, message, recentSessions: recent, trend, streak };
   }
 
-  async end(calls: number, cost: number, notes?: string): Promise<EndResult> {
-    const targetMet = calls >= this.target;
+  async end(calls: number, cost: number, notes?: string, sessionId?: string, project?: string): Promise<EndResult> {
+    const dynamicTarget = this.computeTarget();
+    const targetMet = calls >= dynamicTarget;
     const entry: SessionEntry = {
       date: new Date().toISOString(),
+      sessionId: sessionId ?? new Date().toISOString(),
+      project: project ?? process.cwd(),
       calls,
       cost: Math.round(cost * 1_000_000) / 1_000_000,
       targetMet,
@@ -80,22 +108,61 @@ export class SessionTracker {
     const status = targetMet ? "Target met" : "Target missed";
     const persistNote = persisted ? "Session recorded." : "WARNING: Failed to persist session log.";
     const message = targetMet
-      ? `✅ ${status} (${calls}/${this.target} calls, $${entry.cost.toFixed(4)}). ${persistNote}`
-      : `❌ ${status} (${calls}/${this.target} calls). Please provide root cause analysis. ${persistNote}`;
+      ? `✅ ${status} (${calls}/${dynamicTarget} calls, $${entry.cost.toFixed(4)}). ${persistNote}`
+      : `❌ ${status} (${calls}/${dynamicTarget} calls). Please provide root cause analysis. ${persistNote}`;
 
     return { entry, targetMet, message };
   }
 
   async status(currentCalls: number): Promise<StatusResult> {
-    const entries = await this.readLog();
-    const mode = this.determineMode(entries);
+    if (!this.initialized) {
+      await this.ensureInitialized();
+    }
+
+    const entries = this.cachedEntries;
+    const mode = this.cachedMode;
+    const dynamicTarget = this.computeTarget();
+    const trend = this.calculateTrend(entries);
+    const streak = this.calculateStreak(entries);
+
+    let insight: string;
+    if (streak >= 5) {
+      insight = `Excellent! ${streak}-session streak. Keep it up.`;
+    } else if (streak >= 3) {
+      insight = `Good momentum: ${streak} consecutive sessions on target.`;
+    } else if (trend === "declining") {
+      const recent3 = entries.slice(-3).map(e => e.calls);
+      insight = `Usage declining: ${recent3.join("→")} calls. Consider routing more tasks to MiniMax.`;
+    } else if (trend === "improving") {
+      insight = "Usage improving. On the right track.";
+    } else {
+      insight = `Target: ${dynamicTarget} calls. Current: ${currentCalls}.`;
+    }
 
     return {
       mode,
       currentCalls,
-      target: this.target,
-      onTrack: currentCalls >= this.target,
+      target: this.baseTarget,
+      dynamicTarget,
+      onTrack: currentCalls >= dynamicTarget,
+      trend,
+      streak,
+      insight,
     };
+  }
+
+  /**
+   * Returns the session target.
+   * Note: We only see MiniMax call count, not total session activity,
+   * so we cannot reliably exempt "short" sessions. Use baseTarget as-is.
+   */
+  private computeTarget(): number {
+    return this.baseTarget;
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    await this.start();
   }
 
   private determineMode(entries: SessionEntry[]): SessionMode {
@@ -110,6 +177,38 @@ export class SessionTracker {
     }
 
     return "warning";
+  }
+
+  private calculateTrend(entries: SessionEntry[]): Trend {
+    if (entries.length < 3) return "insufficient_data";
+
+    const recent = entries.slice(-5);
+    const callCounts = recent.map(e => e.calls);
+
+    // Simple linear direction: compare first half avg to second half avg
+    const mid = Math.floor(callCounts.length / 2);
+    const firstHalf = callCounts.slice(0, mid);
+    const secondHalf = callCounts.slice(mid);
+
+    const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+    const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+
+    const diff = avgSecond - avgFirst;
+    if (diff > 1) return "improving";
+    if (diff < -1) return "declining";
+    return "stable";
+  }
+
+  private calculateStreak(entries: SessionEntry[]): number {
+    let streak = 0;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].targetMet) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
   }
 
   private isValidEntry(obj: unknown): obj is SessionEntry {
@@ -129,11 +228,9 @@ export class SessionTracker {
     try {
       content = await readFile(this.logPath, "utf-8");
     } catch (err: unknown) {
-      // File not found → empty log (first run)
       if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
         return [];
       }
-      // Other errors (permissions, broken symlinks) → propagate
       throw err;
     }
 
@@ -144,7 +241,11 @@ export class SessionTracker {
       try {
         const parsed: unknown = JSON.parse(trimmed);
         if (this.isValidEntry(parsed)) {
-          entries.push(parsed);
+          // Backfill optional fields for old entries
+          const entry = parsed as SessionEntry;
+          if (!entry.sessionId) entry.sessionId = entry.date;
+          if (!entry.project) entry.project = "unknown";
+          entries.push(entry);
         }
       } catch {
         // Skip malformed lines

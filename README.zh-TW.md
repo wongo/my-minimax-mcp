@@ -15,7 +15,8 @@ Claude Code (Opus) ─── orchestrator
     ├── minimax_agent_task       → 自主代理迴圈 (讀取 → 寫入 → 測試 → 偵錯)
     ├── minimax_chat             → 多輪對話
     ├── minimax_plan             → 結構化 JSON 實作計畫
-    └── minimax_cost_report      → 工作階段費用追蹤
+    ├── minimax_cost_report      → 工作階段費用追蹤
+    └── minimax_session_tracker  → 跨 session 使用率追蹤（關閉時自動持久化）
 ```
 
 主要特色是**代理迴圈**：MiniMax 使用函式呼叫來自主讀取檔案、寫入程式碼、執行測試並進行偵錯 — 相當於 Sonnet 子代理，但不會消耗 Claude 訂閱權杖。
@@ -99,7 +100,7 @@ claude mcp add --transport stdio --scope user minimax -- bash /path/to/my-minima
 npx my-minimax-mcp --init
 ```
 
-這會顯示 CLAUDE.md 模板並建立使用率記錄檔。將模板複製到 `~/.claude/CLAUDE.md` 即可啟用自動 session 追蹤、Edit Gate 檢查和執行器路由。詳見 `templates/setup-guide.md`。
+這會顯示 CLAUDE.md 模板並建立使用率記錄檔。將模板複製到 `~/.claude/CLAUDE.md` 即可啟用執行器路由規則。Session 追蹤是自動的 — MCP 伺服器關閉時會自動持久化使用數據。詳見 `templates/setup-guide.md`。
 
 ## CLI（用於除錯）
 
@@ -132,18 +133,43 @@ npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-projec
 
 ## 自我改善迴路
 
-`minimax_session_tracker` 工具可自動追蹤跨 session 的使用率：
+使用率追蹤是**自動的** — MCP 伺服器關閉時（SIGTERM/SIGINT）會自動將 session 數據持久化到 `~/.claude/minimax-usage.jsonl`。無需手動呼叫 `start`/`end`。
 
-1. **Session 開始**：呼叫 `command: "start"` — 根據歷史記錄回傳當前模式（normal/warning/forced）
-2. **Session 中途**：呼叫 `command: "status"` — 檢查進度 vs 目標
-3. **Session 結束**：呼叫 `command: "end"` — 將 session 數據記錄到持久化 log
+**可選命令**（透過 `minimax_session_tracker`）：
+- `"start"` — 查看當前模式和最近趨勢
+- `"status"` — 中途進度，含趨勢分析和連續達標記錄
+- `"end"` — 明確結束 session，可附帶未達標根因
 
 **模式：**
-- **Normal**：目標為每 session 5+ MiniMax 呼叫
+- **Normal**：預設。目標為 `MINIMAX_SESSION_TARGET` 次呼叫（預設：5）
 - **Warning**：上次 session 未達標 — 優先使用 MiniMax
 - **Forced**：連續 2 次未達標 — 所有程式碼修改必須使用 MiniMax
 
-將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。工具 schema 列出所有 4 個模型（M2.5、M2.7、M2.5-highspeed、M2.7-highspeed）；不在你 plan 範圍的模型，API 會自動拒絕。
+**趨勢分析**：`status` 命令回傳趨勢方向（improving/declining/stable）、連續達標次數和可行的洞察建議。
+
+**SessionEnd Hook**（選用，完全自動化追蹤）：
+
+```bash
+npx my-minimax-mcp --end-session
+```
+
+加入 `~/.claude/settings.json` hooks：
+
+```json
+{
+  "hooks": {
+    "SessionEnd": [{
+      "hooks": [{
+        "type": "command",
+        "command": "npx my-minimax-mcp --end-session",
+        "timeout": 10
+      }]
+    }]
+  }
+}
+```
+
+將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。工具 schema 列出所有 4 個模型；不在你 plan 範圍的模型，API 會自動拒絕。
 
 ## 功能
 
@@ -198,7 +224,7 @@ MiniMax API 定價（每 1M 權杖）：
 ## 測試
 
 ```bash
-# 執行所有測試（25 項測試）
+# 執行所有測試（32 項測試）
 npm test
 
 # 產生覆蓋率報告
@@ -230,7 +256,8 @@ src/
 ├── conversation/
 │   └── store.ts            # 記憶體對話儲存
 └── utils/
-    ├── cost-tracker.ts     # 權杖使用量和費用追蹤
+    ├── cost-tracker.ts     # 權杖使用量和費用追蹤（含 session ID）
+    ├── session-tracker.ts  # 跨 session 使用率追蹤和趨勢分析
     ├── file-writer.ts      # 安全檔案寫入
     └── retry.ts            # 指數退避重試
 ```

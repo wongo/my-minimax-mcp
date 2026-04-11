@@ -15,7 +15,8 @@ Claude Code (Opus) ─── orchestrator
     ├── minimax_agent_task       → autonomous agent loop (read → write → test → debug)
     ├── minimax_chat             → multi-turn conversation
     ├── minimax_plan             → structured JSON implementation plan
-    └── minimax_cost_report      → session cost tracking
+    ├── minimax_cost_report      → session cost tracking
+    └── minimax_session_tracker  → cross-session usage tracking (auto-persist on shutdown)
 ```
 
 The key feature is the **agent loop**: MiniMax uses function calling to autonomously read files, write code, run tests, and debug — equivalent to a Sonnet sub-agent, but without consuming Claude subscription tokens.
@@ -99,7 +100,7 @@ Restart Claude Code. The 6 tools will appear automatically. Verify with `claude 
 npx my-minimax-mcp --init
 ```
 
-This displays the CLAUDE.md template and creates the usage log. Copy the template to `~/.claude/CLAUDE.md` to enable automatic session tracking, edit gate checks, and executor routing. See `templates/setup-guide.md` for details.
+This displays the CLAUDE.md template and creates the usage log. Copy the template to `~/.claude/CLAUDE.md` to enable executor routing rules. Session tracking is automatic — the MCP server persists usage data on shutdown. See `templates/setup-guide.md` for details.
 
 ## CLI (for debugging)
 
@@ -132,18 +133,43 @@ All settings via environment variables:
 
 ## Self-Improvement Loop
 
-The `minimax_session_tracker` tool enables automatic usage tracking across sessions:
+Usage tracking is **automatic** — the MCP server persists session data to `~/.claude/minimax-usage.jsonl` on shutdown (SIGTERM/SIGINT). No manual `start`/`end` calls required.
 
-1. **Session Start**: Call with `command: "start"` — returns current mode (normal/warning/forced) based on recent history
-2. **Mid-Session**: Call with `command: "status"` — check progress vs target
-3. **Session End**: Call with `command: "end"` — records session data to persistent log
+**Optional commands** via `minimax_session_tracker`:
+- `"start"` — check current mode and recent trends
+- `"status"` — mid-session progress with trend analytics and streak info
+- `"end"` — explicit close with root cause notes if target was missed
 
 **Modes:**
-- **Normal**: Target is 5+ MiniMax calls per session
+- **Normal**: Default. Target is `MINIMAX_SESSION_TARGET` calls (default: 5)
 - **Warning**: Last session missed target — prioritize MiniMax
 - **Forced**: 2 consecutive misses — all code changes must use MiniMax
 
-Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. The tool schema lists all 4 models (M2.5, M2.7, M2.5-highspeed, M2.7-highspeed); the API will reject models not available on your plan.
+**Trend analytics**: The `status` command returns trend direction (improving/declining/stable), streak length, and actionable insights.
+
+**SessionEnd hook** (optional, for fully automatic tracking):
+
+```bash
+npx my-minimax-mcp --end-session
+```
+
+Add to `~/.claude/settings.json` hooks:
+
+```json
+{
+  "hooks": {
+    "SessionEnd": [{
+      "hooks": [{
+        "type": "command",
+        "command": "npx my-minimax-mcp --end-session",
+        "timeout": 10
+      }]
+    }]
+  }
+}
+```
+
+Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. The tool schema lists all 4 models; the API will reject models not available on your plan.
 
 ## Features
 
@@ -198,7 +224,7 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (25 tests)
+# Run all tests (32 tests)
 npm test
 
 # Run with coverage report
@@ -230,7 +256,8 @@ src/
 ├── conversation/
 │   └── store.ts            # In-memory conversation store
 └── utils/
-    ├── cost-tracker.ts     # Token usage and cost tracking
+    ├── cost-tracker.ts     # Token usage and cost tracking (with session ID)
+    ├── session-tracker.ts  # Cross-session usage tracking and trend analytics
     ├── file-writer.ts      # Safe file writing
     └── retry.ts            # Exponential backoff retry
 ```

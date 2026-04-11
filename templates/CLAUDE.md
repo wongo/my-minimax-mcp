@@ -1,4 +1,4 @@
-# MiniMax MCP — Self-Improvement Protocol
+# MiniMax MCP — Behavioral Rules
 
 ## Model Configuration
 
@@ -28,45 +28,31 @@ Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports:
 | 6 | Code review / discussion | `minimax_chat` |
 | 7 | Everything else | Sonnet sub-agent |
 
-## Session Protocol (MANDATORY)
+## Session Tracking (Automatic)
 
-### Session Start
+The MCP server **automatically** tracks usage and persists session data on shutdown. No manual `start`/`end` calls required.
 
-Call `minimax_session_tracker` with command `"start"` at the beginning of every session.
-Follow the mode instructions returned:
+Optional commands for explicit control:
+- `minimax_session_tracker` command `"start"` — check current mode and recent trends
+- `minimax_session_tracker` command `"status"` — mid-session progress with trend analytics
+- `minimax_session_tracker` command `"end"` — explicit close with root cause notes if target missed
 
-- **normal**: Proceed as usual. Target: 5+ MiniMax calls per session.
-- **warning**: Last session missed target. Prioritize MiniMax for all code generation.
-- **forced**: 2 consecutive misses. ALL code changes MUST use MiniMax tools. No exceptions.
+### Modes
 
-### Edit Gate (before EVERY Edit call)
+| Mode | Trigger | Behavior |
+|------|---------|----------|
+| **normal** | Default / last session hit target | Proceed as usual |
+| **warning** | Last session missed target | Prioritize MiniMax for all code generation |
+| **forced** | 2 consecutive misses | ALL code changes MUST use MiniMax |
 
-Before calling the Edit tool for any code change, output:
+### Target
 
-> [Executor Check] Should this go to MiniMax? Reason: ___
-
-Opus Edit is ONLY justified when:
-1. Change is 3 lines or fewer in an already-read file
-2. MiniMax already failed on this specific task (cite the failure)
-3. Task requires deep context across 5+ files
-
-Everything else MUST use MiniMax:
-- New files/components -> `minimax_generate_code`
-- Self-contained bug fix -> `minimax_agent_task`
-- Content/article generation -> `minimax_generate_code`
-- Code review -> `minimax_chat`
-
-### Session End
-
-Before ending the session:
-1. Call `minimax_session_tracker` with command `"end"`
-2. If target not met, provide root cause in the `notes` parameter
-3. Root cause must be specific (not just "will improve next time")
+Target = `MINIMAX_SESSION_TARGET` (default: 5 MiniMax calls per session).
 
 ## Fallback Policy
 
 - **Connection errors** (529/5xx/timeout): Retry up to 2 times with backoff (5s, then 15s). If all fail, route remaining tasks to Sonnet.
-- **Output errors** (incorrect result): Retry once. If still fails, fall back to Sonnet for THIS task only. Subsequent tasks still use MiniMax.
+- **Output errors** (incorrect result): Retry once. If still fails, fall back to Sonnet for THIS task only.
 
 ## Known MiniMax Limitations
 
@@ -88,7 +74,5 @@ Plan           -> minimax_plan
 Review/discuss -> minimax_chat
 Cross-file     -> Sonnet
 
-Before Edit: "[Executor Check] Should this go to MiniMax?"
-Session start: minimax_session_tracker command:"start"
-Session end:   minimax_session_tracker command:"end"
+Session auto-tracked. Use "status" command for progress.
 ```

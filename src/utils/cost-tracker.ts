@@ -6,6 +6,7 @@ import { calculateCost } from "../client/types.js";
 
 interface CostEntry {
   timestamp: string;
+  sessionId: string;
   tool: string;
   model: ModelId;
   tokensUsed: TokenUsage;
@@ -14,16 +15,19 @@ interface CostEntry {
 
 export class CostTracker {
   private entries: CostEntry[] = [];
-  private logPath: string;
+  private readonly logPath: string;
+  readonly sessionId: string;
 
-  constructor(logPath?: string) {
+  constructor(logPath?: string, sessionId?: string) {
     this.logPath = logPath ?? resolve(homedir(), ".claude", "minimax-costs.log");
+    this.sessionId = sessionId ?? new Date().toISOString();
   }
 
   async record(tool: string, model: ModelId, usage: TokenUsage): Promise<void> {
     const cost = calculateCost(usage, model);
     const entry: CostEntry = {
       timestamp: new Date().toISOString(),
+      sessionId: this.sessionId,
       tool,
       model,
       tokensUsed: usage,
