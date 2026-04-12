@@ -8,7 +8,7 @@ interface CostEntry {
   timestamp: string;
   sessionId: string;
   tool: string;
-  model: ModelId;
+  model: string;
   tokensUsed: TokenUsage;
   cost: number;
 }
@@ -61,6 +61,21 @@ export class CostTracker {
       callCount: this.entries.length,
       breakdown: [...this.entries],
     };
+  }
+
+  async recordUnmetered(tool: string): Promise<void> {
+    const entry: CostEntry = {
+      timestamp: new Date().toISOString(),
+      sessionId: this.sessionId,
+      tool,
+      model: "coding-plan",
+      tokensUsed: { inputTokens: 0, outputTokens: 0 },
+      cost: 0,
+    };
+    this.entries = [...this.entries, entry];
+
+    const line = JSON.stringify(entry) + "\n";
+    appendFile(this.logPath, line, "utf-8").catch(() => {});
   }
 
   reset(): void {

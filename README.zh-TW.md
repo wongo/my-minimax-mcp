@@ -16,7 +16,9 @@ Claude Code (Opus) ─── orchestrator
     ├── minimax_chat             → 多輪對話
     ├── minimax_plan             → 結構化 JSON 實作計畫
     ├── minimax_cost_report      → 工作階段費用追蹤
-    └── minimax_session_tracker  → 跨 session 使用率追蹤（關閉時自動持久化）
+    ├── minimax_session_tracker  → 跨 session 使用率追蹤（關閉時自動持久化）
+    ├── minimax_web_search       → 透過 MiniMax Coding Plan API 搜尋網頁
+    └── minimax_understand_image → 透過 MiniMax VLM 分析圖片
 ```
 
 主要特色是**代理迴圈**：MiniMax 使用函式呼叫來自主讀取檔案、寫入程式碼、執行測試並進行偵錯 — 相當於 Sonnet 子代理，但不會消耗 Claude 訂閱權杖。
@@ -31,6 +33,8 @@ Claude Code (Opus) ─── orchestrator
 | `minimax_plan` | 結構化實作計畫 (JSON 格式) | M2.7 |
 | `minimax_cost_report` | 工作階段權杖使用量和費用明細 | — |
 | `minimax_session_tracker` | 跨 session 使用率追蹤，自我改善模式 | — |
+| `minimax_web_search` | 使用 MiniMax AI 搜尋網頁 | — |
+| `minimax_understand_image` | 使用 MiniMax VLM 分析圖片（JPEG/PNG/WebP，上限 20MB） | — |
 
 ## 安裝
 
@@ -92,7 +96,7 @@ claude mcp add --transport stdio --scope user minimax -- bash /path/to/my-minima
 
 > **注意**：使用 `claude mcp add` 是最簡單的設定方式，或直接編輯 `~/.claude/settings.json`。
 
-重新啟動 Claude Code。6 個工具將會自動出現。使用 `claude mcp list` 驗證。
+重新啟動 Claude Code。8 個工具將會自動出現。使用 `claude mcp list` 驗證。
 
 ### 5. 啟用自我改善迴路（選用）
 
@@ -171,6 +175,34 @@ npx my-minimax-mcp --end-session
 
 將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。工具 schema 列出所有 4 個模型；不在你 plan 範圍的模型，API 會自動拒絕。
 
+## 網頁搜尋 & 圖片辨識
+
+這些工具使用 MiniMax 的 Coding Plan API（獨立於 chat completions 端點）。包含在你的 Token Plan 訂閱中，無額外費用。
+
+### 網頁搜尋
+
+```
+minimax_web_search { query: "TypeScript MCP server 教學" }
+```
+
+回傳搜尋結果（標題、連結、摘要、日期）和相關搜尋建議。
+
+### 圖片辨識
+
+```
+minimax_understand_image {
+  prompt: "從這張圖片提取營業時間",
+  imageSource: "https://example.com/schedule.png"
+}
+```
+
+接受三種輸入：
+- **HTTP/HTTPS URL**：自動下載並轉換為 base64
+- **本地檔案路徑**：從磁碟讀取（支援 `@` 前綴）
+- **Base64 data URL**：直接傳遞
+
+支援格式：JPEG、PNG、WebP（上限 20MB）。
+
 ## 功能
 
 - **最大輸出**：每次回應 65,536 個權杖（約 10,000 中文字 / 約 50,000 英文單字）
@@ -200,7 +232,7 @@ MiniMax API 定價（每 1M 權杖）：
 
 ### 已驗證的測試結果
 
-完整整合測試（11 次 MCP 呼叫，10 項測試）：
+完整整合測試（14 次 MCP 呼叫，13 項測試）：
 
 ```
 總費用：   $0.012 (1.2 分)
@@ -220,18 +252,21 @@ MiniMax API 定價（每 1M 權杖）：
 | 安全性（危險命令被阻擋） | 通過 |
 | 路由（Opus → MiniMax，非 Sonnet） | 通過 |
 | 優雅失敗（最大迭代次數） | 通過 |
+| 網頁搜尋（日文查詢） | 通過 |
+| 圖片辨識（URL 圖片） | 通過 |
+| 圖片辨識（本地檔案） | 通過 |
 
 ## 測試
 
 ```bash
-# 執行所有測試（32 項測試）
+# 執行所有測試（61 項測試）
 npm test
 
 # 產生覆蓋率報告
 npm run coverage
 ```
 
-單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化和 session 追蹤。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
+單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化、session 追蹤、圖片工具（MIME 偵測、base64 轉換、大小驗證）和 Coding Plan 客戶端（URL 構建、認證標頭、錯誤處理）。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
 
 ## 專案結構
 
@@ -240,7 +275,8 @@ src/
 ├── mcp-server.ts           # MCP 伺服器入口（stdio 傳輸）
 ├── cli.ts                  # CLI 除錯工具
 ├── client/
-│   ├── minimax-client.ts   # MiniMax API 的 OpenAI SDK 包裝
+│   ├── minimax-client.ts   # MiniMax Chat API 的 OpenAI SDK 包裝
+│   ├── coding-plan-client.ts # Coding Plan API 原生 fetch 客戶端（網頁搜尋、VLM）
 │   └── types.ts            # 共用類型和定價
 ├── agent/
 │   ├── loop.ts             # 代理迴圈核心邏輯
@@ -252,6 +288,8 @@ src/
 │   ├── generate-code.ts    # minimax_generate_code
 │   ├── chat.ts             # minimax_chat
 │   ├── plan.ts             # minimax_plan
+│   ├── web-search.ts       # minimax_web_search
+│   ├── understand-image.ts # minimax_understand_image
 │   └── index.ts            # 工具註冊
 ├── conversation/
 │   └── store.ts            # 記憶體對話儲存
@@ -259,6 +297,7 @@ src/
     ├── cost-tracker.ts     # 權杖使用量和費用追蹤（含 session ID）
     ├── session-tracker.ts  # 跨 session 使用率追蹤和趨勢分析
     ├── file-writer.ts      # 安全檔案寫入
+    ├── image.ts            # 圖片轉 base64 data URL
     └── retry.ts            # 指數退避重試
 ```
 

@@ -8,6 +8,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { MiniMaxClient } from "./client/minimax-client.js";
+import { CodingPlanClient } from "./client/coding-plan-client.js";
 import type { ModelId } from "./client/types.js";
 import { ConversationStore } from "./conversation/store.js";
 import { CostTracker } from "./utils/cost-tracker.js";
@@ -16,6 +17,8 @@ import { generateCode } from "./tools/generate-code.js";
 import { agentTask } from "./tools/agent-task.js";
 import { chat } from "./tools/chat.js";
 import { plan } from "./tools/plan.js";
+import { webSearch } from "./tools/web-search.js";
+import { understandImage } from "./tools/understand-image.js";
 
 export function loadEnvFile(envPath = process.env.DOTENV_CONFIG_PATH ?? resolve(__dirname, "..", ".env")): void {
   try {
@@ -51,6 +54,7 @@ export function createServer(
   const workingDirectory = env.MINIMAX_WORKING_DIR || process.cwd();
 
   const client = new MiniMaxClient(apiKey, defaultModel);
+  const codingPlanClient = new CodingPlanClient(apiKey, env.MINIMAX_API_HOST);
   const conversationStore = new ConversationStore();
   const costTracker = externalCostTracker ?? new CostTracker(costLogPath);
 
@@ -163,6 +167,39 @@ export function createServer(
     async () => {
       const report = costTracker.getReport();
       return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "minimax_web_search",
+    "Search the web using MiniMax AI. Returns results with titles, links, snippets, and related searches.",
+    {
+      query: z.string().describe("Search query"),
+    },
+    async (input) => {
+      try {
+        const result = await webSearch(codingPlanClient, costTracker, input);
+        return { content: [{ type: "text" as const, text: result }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    "minimax_understand_image",
+    "Analyze an image using MiniMax AI vision. Supports URLs, local file paths, or base64 data URLs (JPEG/PNG/WebP, max 20MB).",
+    {
+      prompt: z.string().describe("Question or instruction about the image"),
+      imageSource: z.string().describe("Image URL (HTTP/HTTPS), local file path, or base64 data URL"),
+    },
+    async (input) => {
+      try {
+        const result = await understandImage(codingPlanClient, costTracker, input);
+        return { content: [{ type: "text" as const, text: result }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
     },
   );
 

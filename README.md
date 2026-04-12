@@ -16,7 +16,9 @@ Claude Code (Opus) ─── orchestrator
     ├── minimax_chat             → multi-turn conversation
     ├── minimax_plan             → structured JSON implementation plan
     ├── minimax_cost_report      → session cost tracking
-    └── minimax_session_tracker  → cross-session usage tracking (auto-persist on shutdown)
+    ├── minimax_session_tracker  → cross-session usage tracking (auto-persist on shutdown)
+    ├── minimax_web_search       → web search via MiniMax Coding Plan API
+    └── minimax_understand_image → image analysis via MiniMax VLM
 ```
 
 The key feature is the **agent loop**: MiniMax uses function calling to autonomously read files, write code, run tests, and debug — equivalent to a Sonnet sub-agent, but without consuming Claude subscription tokens.
@@ -31,6 +33,8 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 | `minimax_plan` | Structured implementation plan as JSON | M2.7 |
 | `minimax_cost_report` | Session token usage and cost breakdown | — |
 | `minimax_session_tracker` | Cross-session usage tracking with self-improvement modes | — |
+| `minimax_web_search` | Search the web using MiniMax AI | — |
+| `minimax_understand_image` | Analyze images using MiniMax VLM (JPEG/PNG/WebP, max 20MB) | — |
 
 ## Installation
 
@@ -92,7 +96,7 @@ Or manually edit `~/.claude/settings.json`:
 
 > **Note**: Use `claude mcp add` for the simplest setup, or edit `~/.claude/settings.json` directly.
 
-Restart Claude Code. The 6 tools will appear automatically. Verify with `claude mcp list`.
+Restart Claude Code. The 8 tools will appear automatically. Verify with `claude mcp list`.
 
 ### 5. Enable Self-Improvement Loop (Optional)
 
@@ -171,6 +175,34 @@ Add to `~/.claude/settings.json` hooks:
 
 Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. The tool schema lists all 4 models; the API will reject models not available on your plan.
 
+## Web Search & Image Understanding
+
+These tools use MiniMax's Coding Plan API (separate from the chat completions endpoint). They are included in your Token Plan subscription at no additional per-call cost.
+
+### Web Search
+
+```
+minimax_web_search { query: "TypeScript MCP server tutorial" }
+```
+
+Returns organic results (title, link, snippet, date) and related search suggestions.
+
+### Image Understanding
+
+```
+minimax_understand_image {
+  prompt: "Extract the business hours from this image",
+  imageSource: "https://example.com/schedule.png"
+}
+```
+
+Accepts three input types:
+- **HTTP/HTTPS URL**: Fetched and converted to base64 automatically
+- **Local file path**: Read from disk (supports `@` prefix)
+- **Base64 data URL**: Passed through directly
+
+Supported formats: JPEG, PNG, WebP (max 20MB).
+
 ## Features
 
 - **Max output**: 65,536 tokens per response (~10,000 Chinese characters / ~50K English words)
@@ -200,7 +232,7 @@ Typical task cost: **~$0.04** (agent loop with 10 iterations).
 
 ### Verified Test Results
 
-Full integration test (11 MCP calls, 10 tests):
+Full integration test (14 MCP calls, 13 tests):
 
 ```
 Total cost:   $0.012 (1.2 cents)
@@ -220,18 +252,21 @@ Output tokens: 7,228
 | Security (dangerous cmd blocked) | PASS |
 | Routing (Opus → MiniMax, not Sonnet) | PASS |
 | Graceful failure (max iterations) | PASS |
+| Web search (Japanese query) | PASS |
+| Image understanding (URL) | PASS |
+| Image understanding (local file) | PASS |
 
 ## Testing
 
 ```bash
-# Run all tests (32 tests)
+# Run all tests (61 tests)
 npm test
 
 # Run with coverage report
 npm run coverage
 ```
 
-Unit tests cover safety validation, cost tracking, file writing, server initialization, and session tracking. Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
+Unit tests cover safety validation, cost tracking, file writing, server initialization, session tracking, image utilities (MIME detection, base64 conversion, size validation), and the Coding Plan client (URL construction, auth headers, error handling). Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
 
 ## Project Structure
 
@@ -240,7 +275,8 @@ src/
 ├── mcp-server.ts           # MCP server entry (stdio transport)
 ├── cli.ts                  # CLI for debugging
 ├── client/
-│   ├── minimax-client.ts   # OpenAI SDK wrapper for MiniMax API
+│   ├── minimax-client.ts   # OpenAI SDK wrapper for MiniMax chat API
+│   ├── coding-plan-client.ts # Native fetch client for Coding Plan API (web search, VLM)
 │   └── types.ts            # Shared types and pricing
 ├── agent/
 │   ├── loop.ts             # Agent loop core logic
@@ -252,6 +288,8 @@ src/
 │   ├── generate-code.ts    # minimax_generate_code
 │   ├── chat.ts             # minimax_chat
 │   ├── plan.ts             # minimax_plan
+│   ├── web-search.ts       # minimax_web_search
+│   ├── understand-image.ts # minimax_understand_image
 │   └── index.ts            # Tool registry
 ├── conversation/
 │   └── store.ts            # In-memory conversation store
@@ -259,6 +297,7 @@ src/
     ├── cost-tracker.ts     # Token usage and cost tracking (with session ID)
     ├── session-tracker.ts  # Cross-session usage tracking and trend analytics
     ├── file-writer.ts      # Safe file writing
+    ├── image.ts            # Image to base64 data URL conversion
     └── retry.ts            # Exponential backoff retry
 ```
 

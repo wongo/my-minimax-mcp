@@ -22,11 +22,13 @@ Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports:
 |----------|-----------|----------|
 | 1 | Deep cross-file context needed | Sonnet sub-agent |
 | 2 | Environment-specific (Docker, DB, env vars) | Sonnet sub-agent |
-| 3 | New file/component/structured output | `minimax_generate_code` |
-| 4 | Self-contained bug fix or feature | `minimax_agent_task` |
-| 5 | Implementation plan | `minimax_plan` |
-| 6 | Code review / discussion | `minimax_chat` |
-| 7 | Everything else | Sonnet sub-agent |
+| 3 | Web search needed | `minimax_web_search` |
+| 4 | Image analysis / OCR needed | `minimax_understand_image` |
+| 5 | New file/component/structured output | `minimax_generate_code` |
+| 6 | Self-contained bug fix or feature | `minimax_agent_task` |
+| 7 | Implementation plan | `minimax_plan` |
+| 8 | Code review / discussion | `minimax_chat` |
+| 9 | Everything else | Sonnet sub-agent |
 
 ## Session Tracking (Automatic)
 
@@ -68,6 +70,8 @@ Target = `MINIMAX_SESSION_TARGET` (default: 5 MiniMax calls per session).
 ## Quick Reference
 
 ```
+Web search     -> minimax_web_search
+Image analysis -> minimax_understand_image
 New file       -> minimax_generate_code
 Bug fix        -> minimax_agent_task
 Plan           -> minimax_plan
