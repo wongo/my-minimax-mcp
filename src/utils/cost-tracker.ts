@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { TokenUsage, ModelId } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
+import { calculateSavings, type SavingsReport } from "./savings-calculator.js";
 
 interface CostEntry {
   timestamp: string;
@@ -45,6 +46,7 @@ export class CostTracker {
     totalTokens: TokenUsage;
     callCount: number;
     breakdown: CostEntry[];
+    savings: SavingsReport;
   } {
     const totalTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 };
     let totalCost = 0;
@@ -60,6 +62,7 @@ export class CostTracker {
       totalTokens,
       callCount: this.entries.length,
       breakdown: [...this.entries],
+      savings: calculateSavings(this.entries),
     };
   }
 

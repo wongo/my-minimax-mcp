@@ -162,11 +162,29 @@ export function createServer(
 
   server.tool(
     "minimax_cost_report",
-    "Get a cost and token usage report for this session.",
+    "Get a cost, token usage, and savings report for this session. Shows tokens offloaded to MiniMax that would have consumed Claude subscription quota.",
     {},
     async () => {
       const report = costTracker.getReport();
-      return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+      const s = report.savings;
+      const formatted = {
+        session: {
+          callCount: report.callCount,
+          totalTokens: report.totalTokens,
+          minimaxCost: `$${report.totalCost.toFixed(6)}`,
+        },
+        savings: {
+          tokensOffloaded: s.tokensOffloaded,
+          equivalentSonnetCalls: s.equivalentSonnetCalls,
+          avgTokensPerCall: s.avgTokensPerCall,
+          dataPointsUsed: s.dataPointsUsed,
+          message: s.totalCalls > 0
+            ? `This session: MiniMax handled ${s.tokensOffloaded.total.toLocaleString()} tokens for your coding tasks. That's ~${s.equivalentSonnetCalls} Sonnet sub-agent calls that didn't touch your Claude subscription.`
+            : "No MiniMax calls yet this session.",
+        },
+        breakdown: report.breakdown,
+      };
+      return { content: [{ type: "text", text: JSON.stringify(formatted, null, 2) }] };
     },
   );
 
@@ -228,9 +246,13 @@ export function createServer(
           }
           case "end": {
             const report = costTracker.getReport();
+            const savingsData = {
+              tokensOffloaded: report.savings.tokensOffloaded.total,
+              equivalentSonnetCalls: report.savings.equivalentSonnetCalls,
+            };
             const result = await sessionTracker.end(
               report.callCount, report.totalCost, input.notes,
-              costTracker.sessionId, projectDir,
+              costTracker.sessionId, projectDir, savingsData,
             );
             return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
           }
@@ -276,9 +298,13 @@ async function main() {
     const report = costTracker.getReport();
     if (report.callCount > 0) {
       sessionPersisted = true;
+      const savingsData = {
+        tokensOffloaded: report.savings.tokensOffloaded.total,
+        equivalentSonnetCalls: report.savings.equivalentSonnetCalls,
+      };
       await originalEnd(
         report.callCount, report.totalCost, "auto-persisted on shutdown",
-        costTracker.sessionId, projectDir,
+        costTracker.sessionId, projectDir, savingsData,
       );
     }
   };
@@ -298,7 +324,7 @@ async function main() {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  if (process.argv.includes("--init") || process.argv.includes("--end-session")) {
+  if (process.argv.includes("--init") || process.argv.includes("--end-session") || process.argv.includes("--savings-report")) {
     import("./cli.js").catch((err) => {
       console.error("Failed to run CLI command:", err);
       process.exit(1);

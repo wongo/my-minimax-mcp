@@ -4,7 +4,7 @@
 
 MCP 伺服器，包裝 [MiniMax AI](https://platform.minimax.io) 作為 Claude Code 的自主程式碼執行器。
 
-**用途**：一個典型的程式碼任務中，85% 的 Token 消耗在執行（寫入、測試、除錯），僅 15% 用於規劃。此 MCP 伺服器將那 85% 轉移到 MiniMax API（每任務約 $0.04），讓你的 Claude 訂閱每天可處理 5-7 倍的任務。
+**用途**：程式碼任務的大部分 Claude 訂閱額度消耗在執行（寫入、測試、除錯）。此 MCP 伺服器將這些工作卸載到 MiniMax API（每任務約 $0.04），讓你的 Claude 訂閱能處理更多任務。內建的節省量追蹤用真實數據證明效果。
 
 ## 架構
 
@@ -175,6 +175,47 @@ npx my-minimax-mcp --end-session
 
 將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。工具 schema 列出所有 4 個模型；不在你 plan 範圍的模型，API 會自動拒絕。
 
+## Token 節省追蹤
+
+每次 MiniMax 呼叫都會被追蹤，節省量自動計算。使用 `minimax_cost_report` 查看即時 session 節省量，或用 CLI 查看歷史累計報告。
+
+### 即時（每個 session）
+
+`minimax_cost_report` 現在包含 `savings` 區塊：
+- **tokensOffloaded**：MiniMax 替代 Claude 處理的精確 token 數
+- **equivalentSonnetCalls**：相當於多少次 Sonnet sub-agent 呼叫
+- **avgTokensPerCall**：自適應指標（隨數據累積自動提升精度）
+
+### 歷史累計
+
+```bash
+npx my-minimax-mcp --savings-report
+```
+
+顯示全時間、每月和每日的明細，含工具級分析：
+
+```
+=== MiniMax Token Savings Report ===
+
+Tokens offloaded to MiniMax: 426,040 in + 161,496 out = 587,536 total
+Equivalent Sonnet calls saved: ~68 (avg 8,635 tokens/call)
+MiniMax API cost: $0.2468 (billed separately, not your subscription)
+
+--- By Tool ---
+  agent_task           400,254 tokens (68.1%) | 8 calls
+  generate_code        144,290 tokens (24.6%) | 37 calls
+  chat                  28,142 tokens (4.8%)  | 20 calls
+```
+
+### 自適應精度
+
+`avgTokensPerCall` 根據你的使用模式自動調整：
+- **< 10 筆數據**：使用保守預設值（8,000 tokens/call）
+- **10-100 筆**：從所有有 token 數據的呼叫計算平均值
+- **100+ 筆**：使用最近 100 筆的滾動平均
+
+報告中包含信心等級（LOW/MEDIUM/HIGH），讓你知道估算的可靠程度。MiniMax 用得越多，節省報告越精確。
+
 ## 網頁搜尋 & 圖片辨識
 
 這些工具使用 MiniMax 的 Coding Plan API（獨立於 chat completions 端點）。包含在你的 Token Plan 訂閱中，無額外費用。
@@ -259,14 +300,14 @@ MiniMax API 定價（每 1M 權杖）：
 ## 測試
 
 ```bash
-# 執行所有測試（61 項測試）
+# 執行所有測試（74 項測試）
 npm test
 
 # 產生覆蓋率報告
 npm run coverage
 ```
 
-單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化、session 追蹤、圖片工具（MIME 偵測、base64 轉換、大小驗證）和 Coding Plan 客戶端（URL 構建、認證標頭、錯誤處理）。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
+單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化、session 追蹤、圖片工具、Coding Plan 客戶端和節省量計算器（自適應平均、累計分組、工具分析）。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
 
 ## 專案結構
 
@@ -298,6 +339,7 @@ src/
     ├── session-tracker.ts  # 跨 session 使用率追蹤和趨勢分析
     ├── file-writer.ts      # 安全檔案寫入
     ├── image.ts            # 圖片轉 base64 data URL
+    ├── savings-calculator.ts # Token 節省量計算（自適應）
     └── retry.ts            # 指數退避重試
 ```
 

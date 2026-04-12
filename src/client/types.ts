@@ -62,3 +62,10 @@ export function calculateCost(usage: TokenUsage, model: ModelId): number {
   const pricing = MODEL_PRICING[model];
   return (usage.inputTokens * pricing.input + usage.outputTokens * pricing.output) / 1_000_000;
 }
+
+// Conservative token estimate for unmetered calls (web_search, understand_image)
+// that don't report token usage but still displace Claude subscription work
+export const UNMETERED_CALL_ESTIMATE: TokenUsage = {
+  inputTokens: 2000,
+  outputTokens: 1000,
+};

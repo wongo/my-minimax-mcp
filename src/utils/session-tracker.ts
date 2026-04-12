@@ -10,6 +10,8 @@ export interface SessionEntry {
   cost: number;
   targetMet: boolean;
   notes: string;
+  tokensOffloaded?: number;
+  equivalentSonnetCalls?: number;
 }
 
 export type SessionMode = "normal" | "warning" | "forced";
@@ -90,7 +92,14 @@ export class SessionTracker {
     return { mode, message, recentSessions: recent, trend, streak };
   }
 
-  async end(calls: number, cost: number, notes?: string, sessionId?: string, project?: string): Promise<EndResult> {
+  async end(
+    calls: number,
+    cost: number,
+    notes?: string,
+    sessionId?: string,
+    project?: string,
+    savingsData?: { tokensOffloaded: number; equivalentSonnetCalls: number },
+  ): Promise<EndResult> {
     const dynamicTarget = this.computeTarget();
     const targetMet = calls >= dynamicTarget;
     const entry: SessionEntry = {
@@ -101,6 +110,10 @@ export class SessionTracker {
       cost: Math.round(cost * 1_000_000) / 1_000_000,
       targetMet,
       notes: notes ?? (targetMet ? "" : "No root cause provided"),
+      ...(savingsData && {
+        tokensOffloaded: savingsData.tokensOffloaded,
+        equivalentSonnetCalls: savingsData.equivalentSonnetCalls,
+      }),
     };
 
     const persisted = await this.appendEntry(entry);

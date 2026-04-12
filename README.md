@@ -4,7 +4,7 @@
 
 MCP server that wraps [MiniMax AI](https://platform.minimax.io) as an autonomous code executor for Claude Code.
 
-**Purpose**: A typical coding task consumes 85% of tokens on execution (writing, testing, debugging) and only 15% on planning. This MCP server moves that 85% to MiniMax API (~$0.04/task), so your Claude subscription handles 5-7x more tasks per day.
+**Purpose**: Coding tasks consume the bulk of your Claude subscription quota on execution (writing, testing, debugging). This MCP server offloads that work to MiniMax API (~$0.04/task), so your Claude subscription handles significantly more tasks per day. Built-in savings tracking proves it with real data.
 
 ## Architecture
 
@@ -175,6 +175,47 @@ Add to `~/.claude/settings.json` hooks:
 
 Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. The tool schema lists all 4 models; the API will reject models not available on your plan.
 
+## Token Savings Tracking
+
+Every MiniMax call is tracked, and the savings are computed automatically. Use `minimax_cost_report` to see real-time savings per session, or run the CLI for cumulative reports.
+
+### Real-time (per session)
+
+`minimax_cost_report` now includes a `savings` section:
+- **tokensOffloaded**: Exact count of tokens MiniMax handled instead of Claude
+- **equivalentSonnetCalls**: How many Sonnet sub-agent calls that represents
+- **avgTokensPerCall**: Self-adaptive metric (auto-improves with more data)
+
+### Cumulative (historical)
+
+```bash
+npx my-minimax-mcp --savings-report
+```
+
+Shows all-time, monthly, and daily breakdowns with tool-level analysis:
+
+```
+=== MiniMax Token Savings Report ===
+
+Tokens offloaded to MiniMax: 426,040 in + 161,496 out = 587,536 total
+Equivalent Sonnet calls saved: ~68 (avg 8,635 tokens/call)
+MiniMax API cost: $0.2468 (billed separately, not your subscription)
+
+--- By Tool ---
+  agent_task           400,254 tokens (68.1%) | 8 calls
+  generate_code        144,290 tokens (24.6%) | 37 calls
+  chat                  28,142 tokens (4.8%)  | 20 calls
+```
+
+### Self-Adaptive Accuracy
+
+The `avgTokensPerCall` metric adapts to your usage patterns:
+- **< 10 data points**: Uses conservative default (8,000 tokens/call)
+- **10-100 data points**: Computes from all your metered calls
+- **100+ data points**: Uses rolling window of last 100 calls
+
+Confidence level (LOW/MEDIUM/HIGH) is reported so you know how reliable the estimate is. The more you use MiniMax, the more accurate the savings report becomes.
+
 ## Web Search & Image Understanding
 
 These tools use MiniMax's Coding Plan API (separate from the chat completions endpoint). They are included in your Token Plan subscription at no additional per-call cost.
@@ -259,14 +300,14 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (61 tests)
+# Run all tests (74 tests)
 npm test
 
 # Run with coverage report
 npm run coverage
 ```
 
-Unit tests cover safety validation, cost tracking, file writing, server initialization, session tracking, image utilities (MIME detection, base64 conversion, size validation), and the Coding Plan client (URL construction, auth headers, error handling). Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
+Unit tests cover safety validation, cost tracking, file writing, server initialization, session tracking, image utilities, the Coding Plan client, and the savings calculator (adaptive averaging, cumulative grouping, tool breakdown). Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
 
 ## Project Structure
 
@@ -298,6 +339,7 @@ src/
     ├── session-tracker.ts  # Cross-session usage tracking and trend analytics
     ├── file-writer.ts      # Safe file writing
     ├── image.ts            # Image to base64 data URL conversion
+    ├── savings-calculator.ts # Token savings computation (self-adaptive)
     └── retry.ts            # Exponential backoff retry
 ```
 
