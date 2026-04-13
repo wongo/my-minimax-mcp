@@ -2,6 +2,10 @@
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
+<p align="center">
+  <img src="assets/banner.png" alt="Token costs burning vs MiniMax workflow efficiency" width="600">
+</p>
+
 MCP server that wraps [MiniMax AI](https://platform.minimax.io) as an autonomous code executor for Claude Code.
 
 **Purpose**: Coding tasks consume the bulk of your Claude subscription quota on execution (writing, testing, debugging). This MCP server offloads that work to MiniMax API (~$0.04/task), so your Claude subscription handles significantly more tasks per day. Built-in savings tracking proves it with real data.
