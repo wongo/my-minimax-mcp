@@ -27,10 +27,10 @@ Claude Code (Opus) ─── orchestrator
 
 | 工具 | 描述 | 預設模型 |
 |------|-------------|---------------|
-| `minimax_agent_task` | 自主程式碼開發：讀取檔案、寫入程式碼、執行測試、偵錯迴圈 | M2.7 |
-| `minimax_generate_code` | 生成程式碼，可選擇寫入檔案 | M2.7 |
-| `minimax_chat` | 多輪對話，保留上下文 | M2.7 |
-| `minimax_plan` | 結構化實作計畫 (JSON 格式) | M2.7 |
+| `minimax_agent_task` | 自主程式碼開發：讀取檔案、寫入程式碼、執行測試、偵錯迴圈 | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_generate_code` | 生成程式碼，可選擇寫入檔案 | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_chat` | 多輪對話，保留上下文 | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_plan` | 結構化實作計畫 (JSON 格式) | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_cost_report` | 工作階段權杖使用量和費用明細 | — |
 | `minimax_session_tracker` | 跨 session 使用率追蹤，自我改善模式 | — |
 | `minimax_web_search` | 使用 MiniMax AI 搜尋網頁 | — |
@@ -119,6 +119,8 @@ npx tsx src/cli.ts --mode chat --task "explain async/await"
 npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-project
 ```
 
+CLI 執行現在也會寫入 `MINIMAX_COST_LOG`，因此 `--end-session` 與 `--savings-report` 會納入一般 CLI 使用，而不只 MCP 伺服器流量。
+
 ## 設定
 
 所有設定透過環境變數：
@@ -126,11 +128,11 @@ npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-projec
 | 變數 | 描述 | 預設值 |
 |----------|-------------|---------|
 | `MINIMAX_API_KEY` | API 金鑰（必填） | — |
-| `MINIMAX_DEFAULT_MODEL` | 預設模型 | `MiniMax-M2.7` |
+| `MINIMAX_DEFAULT_MODEL` | 所有 MiniMax chat/plan/code/agent 工具的預設模型；若單次呼叫有明確指定 `model` 則以該值為準 | `MiniMax-M2.7` |
 | `MINIMAX_MAX_ITERATIONS` | 代理迴圈最大迭代次數 | `25` |
 | `MINIMAX_TIMEOUT_MS` | 每任務超時時間 | `300000` (5分鐘) |
 | `MINIMAX_BASH_WHITELIST` | 允許的額外 bash 命令（逗號分隔） | — |
-| `MINIMAX_WORKING_DIR` | 檔案操作的工作目錄 | `process.cwd()` |
+| `MINIMAX_WORKING_DIR` | 檔案操作的基底工作目錄；`minimax_agent_task` 只能使用此目錄或其子目錄 | `process.cwd()` |
 | `MINIMAX_COST_LOG` | 費用日誌檔案路徑 | `~/.claude/minimax-costs.log` |
 | `MINIMAX_USAGE_LOG` | Session 使用率記錄檔路徑 | `~/.claude/minimax-usage.jsonl` |
 | `MINIMAX_SESSION_TARGET` | 每 session 最低 MiniMax 呼叫數 | `5` |
@@ -173,11 +175,11 @@ npx my-minimax-mcp --end-session
 }
 ```
 
-將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。工具 schema 列出所有 4 個模型；不在你 plan 範圍的模型，API 會自動拒絕。
+將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。所有 MiniMax 工具現在都會預設繼承這個值；不在你 plan 範圍的模型，API 會自動拒絕。
 
 ## Token 節省追蹤
 
-每次 MiniMax 呼叫都會被追蹤，節省量自動計算。使用 `minimax_cost_report` 查看即時 session 節省量，或用 CLI 查看歷史累計報告。
+每次 MiniMax 呼叫都會被追蹤，節省量自動計算。這包含一般 CLI 執行與 MCP 伺服器使用。使用 `minimax_cost_report` 查看即時 session 節省量，或用 CLI 查看歷史累計報告。
 
 ### 即時（每個 session）
 
@@ -256,6 +258,7 @@ minimax_understand_image {
 - **Bash 白名單**：僅允許 `npm test`、`npx`、`node`、`tsc`、`eslint`、`pytest`、`go test`、`cargo test` 等
 - **阻擋命令連結**：拒絕 `&&`、`;`、`|` 運算子
 - **路徑隔離**：所有檔案操作限制在工作目錄內
+- **代理工作目錄邊界**：`minimax_agent_task` 只能在 `MINIMAX_WORKING_DIR` 或其子目錄內運作
 - **迭代上限**：每任務最多 25 次迭代（可設定）
 - **超時**：每任務 5 分鐘（可設定）
 - **權杖預算**：每任務最多 500K 輸入權杖

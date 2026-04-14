@@ -19,6 +19,7 @@ import { chat } from "./tools/chat.js";
 import { plan } from "./tools/plan.js";
 import { webSearch } from "./tools/web-search.js";
 import { understandImage } from "./tools/understand-image.js";
+import { resolveWorkingDirectory } from "./agent/safety.js";
 
 export function loadEnvFile(envPath = process.env.DOTENV_CONFIG_PATH ?? resolve(__dirname, "..", ".env")): void {
   try {
@@ -115,7 +116,15 @@ export function createServer(
             }
           : undefined;
 
-        const result = await agentTask(client, costTracker, input, onProgress);
+        const result = await agentTask(
+          client,
+          costTracker,
+          {
+            ...input,
+            workingDirectory: resolveWorkingDirectory(input.workingDirectory, workingDirectory),
+          },
+          onProgress,
+        );
         return { content: [{ type: "text", text: result }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };

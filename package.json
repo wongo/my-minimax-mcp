@@ -17,8 +17,8 @@
     "build": "tsc",
     "dev": "tsx src/mcp-server.ts",
     "cli": "tsx src/cli.ts",
-    "test": "node --import tsx --test test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts test/session-tracker.test.ts test/image-utils.test.ts test/coding-plan-client.test.ts test/savings-calculator.test.ts",
-    "coverage": "node --import tsx --test --experimental-test-coverage test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts test/session-tracker.test.ts test/image-utils.test.ts test/coding-plan-client.test.ts test/savings-calculator.test.ts"
+    "test": "node --import tsx --test test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts test/session-tracker.test.ts test/image-utils.test.ts test/coding-plan-client.test.ts test/savings-calculator.test.ts test/agent-executor.test.ts test/tool-default-models.test.ts",
+    "coverage": "node --import tsx --test --experimental-test-coverage test/cost-tracker.test.ts test/file-writer.test.ts test/mcp-server.test.ts test/safety.test.ts test/session-tracker.test.ts test/image-utils.test.ts test/coding-plan-client.test.ts test/savings-calculator.test.ts test/agent-executor.test.ts test/tool-default-models.test.ts"
   },
   "keywords": [
     "mcp",

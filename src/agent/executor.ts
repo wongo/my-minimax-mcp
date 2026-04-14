@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { dirname } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { validateFilePath, validateBashCommand, type SafetyConfig } from "./safety.js";
 
 const execFileAsync = promisify(execFile);
@@ -79,18 +79,13 @@ export class FunctionExecutor {
   }
 
   private async listFiles(pattern: string): Promise<string> {
-    try {
-      const { stdout } = await execFileAsync("find", [this.config.workingDirectory, "-type", "f", "-path", `*${pattern}*`], {
-        timeout: 10_000,
-        maxBuffer: 1024 * 1024,
-      });
-      const files = stdout.trim().split("\n").filter(Boolean);
-      // Make paths relative
-      const relative = files.map(f => f.replace(this.config.workingDirectory + "/", ""));
-      return relative.join("\n") || "No files found";
-    } catch {
-      return "No files found";
-    }
+    const files = await this.walkFiles(this.config.workingDirectory);
+    const matcher = globToRegExp(pattern);
+    const matches = files
+      .map((file) => relative(this.config.workingDirectory, file).replaceAll("\\", "/"))
+      .filter((file) => matcher.test(file));
+
+    return matches.join("\n") || "No files found";
   }
 
   private async searchContent(pattern: string, path?: string, fileGlob?: string): Promise<string> {
@@ -109,4 +104,62 @@ export class FunctionExecutor {
       return "No matches found";
     }
   }
+
+  private async walkFiles(directory: string): Promise<string[]> {
+    const entries = await readdir(directory, { withFileTypes: true });
+    const files: string[] = [];
+
+    for (const entry of entries) {
+      const fullPath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...await this.walkFiles(fullPath));
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+
+    return files;
+  }
+}
+
+function globToRegExp(pattern: string): RegExp {
+  const normalized = pattern.replaceAll("\\", "/");
+  let regex = "^";
+
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
+    const next = normalized[i + 1];
+
+    if (char === "*" && next === "*" && normalized[i + 2] === "/") {
+      regex += "(?:.*/)?";
+      i += 2;
+      continue;
+    }
+
+    if (char === "*" && next === "*") {
+      regex += ".*";
+      i++;
+      continue;
+    }
+
+    if (char === "*") {
+      regex += "[^/]*";
+      continue;
+    }
+
+    if (char === "?") {
+      regex += "[^/]";
+      continue;
+    }
+
+    if ("\\^$+?.()|{}[]".includes(char)) {
+      regex += `\\${char}`;
+      continue;
+    }
+
+    regex += char;
+  }
+
+  regex += "$";
+  return new RegExp(regex);
 }

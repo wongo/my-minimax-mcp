@@ -31,10 +31,10 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 
 | Tool | Description | Default Model |
 |------|-------------|---------------|
-| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop | M2.7 |
-| `minimax_generate_code` | Generate code, optionally write to file | M2.7 |
-| `minimax_chat` | Multi-turn conversation with context preservation | M2.7 |
-| `minimax_plan` | Structured implementation plan as JSON | M2.7 |
+| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_generate_code` | Generate code, optionally write to file | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_chat` | Multi-turn conversation with context preservation | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_plan` | Structured implementation plan as JSON | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_cost_report` | Session token usage and cost breakdown | — |
 | `minimax_session_tracker` | Cross-session usage tracking with self-improvement modes | — |
 | `minimax_web_search` | Search the web using MiniMax AI | — |
@@ -123,6 +123,8 @@ npx tsx src/cli.ts --mode chat --task "explain async/await"
 npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-project
 ```
 
+CLI runs also append to `MINIMAX_COST_LOG`, so `--end-session` and `--savings-report` include normal CLI usage in addition to MCP usage.
+
 ## Configuration
 
 All settings via environment variables:
@@ -130,11 +132,11 @@ All settings via environment variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `MINIMAX_API_KEY` | API key (required) | — |
-| `MINIMAX_DEFAULT_MODEL` | Default model | `MiniMax-M2.7` |
+| `MINIMAX_DEFAULT_MODEL` | Default model used by all MiniMax chat/plan/code/agent tools unless a per-call override is supplied | `MiniMax-M2.7` |
 | `MINIMAX_MAX_ITERATIONS` | Agent loop max iterations | `25` |
 | `MINIMAX_TIMEOUT_MS` | Per-task timeout | `300000` (5min) |
 | `MINIMAX_BASH_WHITELIST` | Additional allowed bash commands (comma-separated) | — |
-| `MINIMAX_WORKING_DIR` | Working directory for file operations | `process.cwd()` |
+| `MINIMAX_WORKING_DIR` | Base working directory for file operations; `minimax_agent_task` may only use this directory or a nested subdirectory | `process.cwd()` |
 | `MINIMAX_COST_LOG` | Cost log file path | `~/.claude/minimax-costs.log` |
 | `MINIMAX_USAGE_LOG` | Session usage log path | `~/.claude/minimax-usage.jsonl` |
 | `MINIMAX_SESSION_TARGET` | Min MiniMax calls per session | `5` |
@@ -177,11 +179,11 @@ Add to `~/.claude/settings.json` hooks:
 }
 ```
 
-Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. The tool schema lists all 4 models; the API will reject models not available on your plan.
+Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. All MiniMax tools inherit this value by default, and the API will reject models not available on your plan.
 
 ## Token Savings Tracking
 
-Every MiniMax call is tracked, and the savings are computed automatically. Use `minimax_cost_report` to see real-time savings per session, or run the CLI for cumulative reports.
+Every MiniMax call is tracked, and the savings are computed automatically. This includes normal CLI runs as well as MCP server usage. Use `minimax_cost_report` to see real-time savings per session, or run the CLI for cumulative reports.
 
 ### Real-time (per session)
 
@@ -260,6 +262,7 @@ The agent loop runs with strict sandboxing:
 - **Bash whitelist**: Only `npm test`, `npx`, `node`, `tsc`, `eslint`, `pytest`, `go test`, `cargo test`, etc.
 - **Command chaining blocked**: `&&`, `;`, `|` operators are rejected
 - **Path isolation**: All file operations restricted to the working directory
+- **Agent working-directory boundary**: `minimax_agent_task` can only operate inside `MINIMAX_WORKING_DIR` or one of its subdirectories
 - **Iteration cap**: 25 iterations max per task (configurable)
 - **Timeout**: 5 minutes per task (configurable)
 - **Token budget**: 500K input tokens max per task

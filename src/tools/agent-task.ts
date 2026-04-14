@@ -20,7 +20,7 @@ export async function agentTask(
   input: AgentTaskInput,
   onProgress?: OnProgressCallback,
 ): Promise<string> {
-  const model = (input.model ?? "MiniMax-M2.5") as ModelId;
+  const model = input.model ?? client.getDefaultModel();
 
   const result = await runAgentLoop(client, {
     task: input.task,

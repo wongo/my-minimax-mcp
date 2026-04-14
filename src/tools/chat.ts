@@ -21,7 +21,7 @@ export async function chat(
   costTracker: CostTracker,
   input: ChatInput,
 ): Promise<string> {
-  const model = (input.model ?? "MiniMax-M2.7") as ModelId;
+  const model = input.model ?? client.getDefaultModel();
 
   let conversationId: string;
   if (input.conversationId && conversationStore.has(input.conversationId)) {

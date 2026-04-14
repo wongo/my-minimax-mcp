@@ -152,6 +152,7 @@ async function main(apiKey: string) {
     console.log(`Files changed: ${result.filesChanged.join(", ") || "none"}`);
     console.log(`Tokens: ${result.tokensUsed.inputTokens} in / ${result.tokensUsed.outputTokens} out`);
     console.log(`Cost: $${result.cost.toFixed(6)}`);
+    await costTracker.record("agent_task", model, result.tokensUsed);
   } else if (mode === "chat") {
     const response = await client.chat(
       [
@@ -163,6 +164,7 @@ async function main(apiKey: string) {
     console.log(response.content ?? "(no response)");
     console.log(`\nTokens: ${response.usage.inputTokens} in / ${response.usage.outputTokens} out`);
     console.log(`Cost: $${calculateCost(response.usage, model).toFixed(6)}`);
+    await costTracker.record("chat", model, response.usage);
   } else {
     const systemPrompt = `You are an expert programmer. Generate clean, production-ready ${language} code. Return ONLY the code without markdown fences or explanations.`;
     const response = await client.chat(
@@ -175,6 +177,7 @@ async function main(apiKey: string) {
     console.log(response.content ?? "(no response)");
     console.log(`\nTokens: ${response.usage.inputTokens} in / ${response.usage.outputTokens} out`);
     console.log(`Cost: $${calculateCost(response.usage, model).toFixed(6)}`);
+    await costTracker.record("generate_code", model, response.usage);
   }
 }
 

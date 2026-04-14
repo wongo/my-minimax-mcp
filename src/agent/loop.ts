@@ -85,7 +85,7 @@ export async function runAgentLoop(
   };
 
   const executor = new FunctionExecutor(config);
-  const model = options.model ?? ("MiniMax-M2.5" as ModelId);
+  const model = options.model ?? client.getDefaultModel();
   const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
   let iterations = 0;
 

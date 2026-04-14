@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDefaultSafetyConfig, validateBashCommand, validateFilePath } from "../src/agent/safety.ts";
+import { getDefaultSafetyConfig, resolveWorkingDirectory, validateBashCommand, validateFilePath } from "../src/agent/safety.ts";
 import { withEnv } from "./helpers.ts";
 
 test("validateFilePath allows files inside the working directory", () => {
@@ -11,6 +11,27 @@ test("validateFilePath allows files inside the working directory", () => {
 test("validateFilePath rejects parent-directory traversal", () => {
   assert.throws(
     () => validateFilePath("../secrets.txt", "/tmp/project"),
+    /Path escapes working directory/,
+  );
+});
+
+test("resolveWorkingDirectory allows the configured base directory", () => {
+  assert.equal(
+    resolveWorkingDirectory("/tmp/project", "/tmp/project"),
+    "/tmp/project",
+  );
+});
+
+test("resolveWorkingDirectory allows nested directories inside the base directory", () => {
+  assert.equal(
+    resolveWorkingDirectory("/tmp/project/packages/app", "/tmp/project"),
+    "/tmp/project/packages/app",
+  );
+});
+
+test("resolveWorkingDirectory rejects directories outside the configured base directory", () => {
+  assert.throws(
+    () => resolveWorkingDirectory("/tmp/other-project", "/tmp/project"),
     /Path escapes working directory/,
   );
 });

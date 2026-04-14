@@ -18,7 +18,7 @@ export async function plan(
   costTracker: CostTracker,
   input: PlanInput,
 ): Promise<string> {
-  const model = (input.model ?? "MiniMax-M2.7") as ModelId;
+  const model = input.model ?? client.getDefaultModel();
 
   const systemPrompt = `You are an expert software architect. Create a structured implementation plan as JSON.
 

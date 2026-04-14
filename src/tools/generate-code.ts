@@ -22,7 +22,7 @@ export async function generateCode(
   workingDirectory: string,
   input: GenerateCodeInput,
 ): Promise<string> {
-  const model = (input.model ?? "MiniMax-M2.5") as ModelId;
+  const model = input.model ?? client.getDefaultModel();
 
   const systemPrompt = `You are an expert programmer. Generate clean, production-ready ${input.language} code. Return ONLY the code without markdown fences or explanations.`;
 

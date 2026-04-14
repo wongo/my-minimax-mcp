@@ -22,6 +22,10 @@ export class MiniMaxClient {
     this.defaultModel = defaultModel;
   }
 
+  getDefaultModel(): ModelId {
+    return this.defaultModel;
+  }
+
   async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<ChatResponse> {
     const model = options.model ?? this.defaultModel;
 
