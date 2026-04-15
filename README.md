@@ -1,5 +1,9 @@
 # my-minimax-mcp
 
+[![npm version](https://img.shields.io/npm/v/my-minimax-mcp.svg)](https://www.npmjs.com/package/my-minimax-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/my-minimax-mcp.svg)](https://www.npmjs.com/package/my-minimax-mcp)
+[![license](https://img.shields.io/npm/l/my-minimax-mcp.svg)](https://github.com/wongo/my-minimax-mcp/blob/main/LICENSE)
+
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
 <p align="center">
