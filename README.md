@@ -7,7 +7,7 @@
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
 <p align="center">
-  <img src="assets/banner.png" alt="Token costs burning vs MiniMax workflow efficiency" width="600">
+  <img src="https://raw.githubusercontent.com/wongo/my-minimax-mcp/main/assets/banner.png" alt="Token costs burning vs MiniMax workflow efficiency" width="600">
 </p>
 
 MCP server that wraps [MiniMax AI](https://platform.minimax.io) as an autonomous code executor for Claude Code.
