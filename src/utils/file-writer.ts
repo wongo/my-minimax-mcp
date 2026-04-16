@@ -7,9 +7,17 @@ export async function safeWriteFile(
   workingDirectory: string,
 ): Promise<string> {
   const resolved = resolve(workingDirectory, filePath);
-  const rel = relative(workingDirectory, resolved);
+  const resolvedWorkDir = resolve(workingDirectory);
+  const rel = relative(resolvedWorkDir, resolved);
 
+  // Block parent-directory traversal
   if (rel.startsWith("..")) {
+    throw new Error(`Path escapes working directory: ${filePath}`);
+  }
+
+  // Block absolute paths that don't share the working directory prefix
+  // (handles Windows cross-drive paths where relative() returns an absolute path)
+  if (!resolved.startsWith(resolvedWorkDir + "/") && resolved !== resolvedWorkDir) {
     throw new Error(`Path escapes working directory: ${filePath}`);
   }
 

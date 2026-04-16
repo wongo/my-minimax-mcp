@@ -22,3 +22,12 @@ test("safeWriteFile rejects paths that escape the working directory", async () =
     /Path escapes working directory/,
   );
 });
+
+test("safeWriteFile rejects absolute paths outside the working directory", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-file-writer-"));
+
+  await assert.rejects(
+    () => safeWriteFile("/tmp/evil.txt", "nope", workingDirectory),
+    /Path escapes working directory/,
+  );
+});

@@ -2,3 +2,18 @@ node_modules/
 dist/
 .env
 *.log
+
+# Local / private files
+docs/facebook-posts.md
+.mcp.json
+supabase/
+HANDOFF.md
+INTEGRATION-REFERENCE.md
+entities.json
+mempalace.yaml
+.codex
+
+# Test build artifacts
+test/**/*.js
+test/**/*.js.map
+test/**/*.d.ts
