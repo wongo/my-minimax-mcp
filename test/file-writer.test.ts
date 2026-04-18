@@ -31,3 +31,17 @@ test("safeWriteFile rejects absolute paths outside the working directory", async
     /Path escapes working directory/,
   );
 });
+
+test("safeWriteFile error message includes workingDirectory and 'relative' hint", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-file-writer-"));
+
+  let errorMessage = "";
+  try {
+    await safeWriteFile("../outside.txt", "nope", workingDirectory);
+  } catch (err) {
+    errorMessage = err instanceof Error ? err.message : String(err);
+  }
+
+  assert.match(errorMessage, /relative/i);
+  assert.ok(errorMessage.includes(workingDirectory), `Error message should include workingDirectory path. Got: ${errorMessage}`);
+});

@@ -38,6 +38,29 @@ export const AGENT_FUNCTIONS: FunctionDefinition[] = [
     },
   },
   {
+    name: "edit_file_batch",
+    description: "Apply multiple edits to a file atomically. All edits must succeed or none are applied.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File path relative to working directory" },
+        edits: {
+          type: "array",
+          description: "List of edits to apply in sequence",
+          items: {
+            type: "object",
+            properties: {
+              old_string: { type: "string", description: "Exact string to find and replace" },
+              new_string: { type: "string", description: "Replacement string" },
+            },
+            required: ["old_string", "new_string"],
+          },
+        },
+      },
+      required: ["path", "edits"],
+    },
+  },
+  {
     name: "run_bash",
     description: "Execute a shell command. Only whitelisted commands are allowed (npm test, npm run, npx, node, tsc, eslint, pytest, go test, cargo test, etc.).",
     parameters: {

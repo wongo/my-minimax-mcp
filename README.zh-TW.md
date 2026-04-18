@@ -31,7 +31,7 @@ Claude Code (Opus) ─── orchestrator
 
 | 工具 | 描述 | 預設模型 |
 |------|-------------|---------------|
-| `minimax_agent_task` | 自主程式碼開發：讀取檔案、寫入程式碼、執行測試、偵錯迴圈 | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_agent_task` | 自主程式碼開發：讀取檔案、寫入程式碼、執行測試、偵錯迴圈。支援工具：`read_file`、`write_file`、`edit_file`、`edit_file_batch`、`run_bash`、`list_files`、`search_content` | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_generate_code` | 生成程式碼，可選擇寫入檔案 | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_chat` | 多輪對話，保留上下文 | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_plan` | 結構化實作計畫 (JSON 格式) | `MINIMAX_DEFAULT_MODEL` |
@@ -307,7 +307,7 @@ MiniMax API 定價（每 1M 權杖）：
 ## 測試
 
 ```bash
-# 執行所有測試（81 項測試）
+# 執行所有測試（89 項測試）
 npm test
 
 # 產生覆蓋率報告

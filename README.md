@@ -35,7 +35,7 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 
 | Tool | Description | Default Model |
 |------|-------------|---------------|
-| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop. Supports tools: `read_file`, `write_file`, `edit_file`, `edit_file_batch`, `run_bash`, `list_files`, `search_content` | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_generate_code` | Generate code, optionally write to file | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_chat` | Multi-turn conversation with context preservation | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_plan` | Structured implementation plan as JSON | `MINIMAX_DEFAULT_MODEL` |
@@ -311,7 +311,7 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (81 tests)
+# Run all tests (89 tests)
 npm test
 
 # Run with coverage report

@@ -12,13 +12,17 @@ export async function safeWriteFile(
 
   // Block parent-directory traversal
   if (rel.startsWith("..")) {
-    throw new Error(`Path escapes working directory: ${filePath}`);
+    throw new Error(
+      `Path escapes working directory: ${filePath}. Use a path relative to: ${resolvedWorkDir}`,
+    );
   }
 
   // Block absolute paths that don't share the working directory prefix
   // (handles Windows cross-drive paths where relative() returns an absolute path)
   if (!resolved.startsWith(resolvedWorkDir + "/") && resolved !== resolvedWorkDir) {
-    throw new Error(`Path escapes working directory: ${filePath}`);
+    throw new Error(
+      `Path escapes working directory: ${filePath}. Use a path relative to: ${resolvedWorkDir}`,
+    );
   }
 
   await mkdir(dirname(resolved), { recursive: true });

@@ -56,6 +56,7 @@ function describeToolCall(name: string, argsJson: string): string {
       case "read_file":
       case "write_file":
       case "edit_file":
+      case "edit_file_batch":
         return `${name} → ${args.path}`;
       case "run_bash":
         return `${name} → ${(args.command as string).slice(0, 80)}`;
