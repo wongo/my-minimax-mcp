@@ -30,6 +30,9 @@
   ],
   "author": "nickweng",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wongo/my-minimax-mcp.git"
