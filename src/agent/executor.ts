@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rename, unlink } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, basename } from "node:path";
 import { validateFilePath, validateBashCommand, type SafetyConfig } from "./safety.js";
 
 const execFileAsync = promisify(execFile);
@@ -77,7 +77,7 @@ export class FunctionExecutor {
       }
     }
 
-    await writeFile(resolved, content, "utf-8");
+    await atomicWrite(resolved, content);
     return `File edited (batch, ${edits.length} changes): ${path}`;
   }
 
@@ -140,6 +140,26 @@ export class FunctionExecutor {
     }
 
     return files;
+  }
+}
+
+// ── Atomic write helper ───────────────────────────────────────────────────────
+
+/**
+ * Write content to targetPath atomically using a temp file + rename.
+ * POSIX rename within one filesystem is atomic, so a crash mid-write
+ * cannot truncate the original file.
+ */
+async function atomicWrite(targetPath: string, content: string): Promise<void> {
+  const dir = dirname(targetPath);
+  const base = basename(targetPath);
+  const tmpPath = join(dir, `.${base}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    await writeFile(tmpPath, content, "utf-8");
+    await rename(tmpPath, targetPath);
+  } catch (err) {
+    try { await unlink(tmpPath); } catch {}
+    throw err;
   }
 }
 
@@ -305,11 +325,23 @@ function applyEdit(
   }
 
   // exactOccurrences === 0 — try fuzzy match
-  const fuzzyMatch = findNormalizedMatch(content, oldString);
-  if (fuzzyMatch !== null) {
-    const newContent =
-      content.slice(0, fuzzyMatch.start) + newString + content.slice(fuzzyMatch.end);
-    return { newContent, matchType: "fuzzy" };
+  // Guard: if the file uses CRLF and the fuzzy path would succeed, refuse with a helpful
+  // error instead of silently producing mixed LF/CRLF output.
+  if (content.includes("\r\n")) {
+    const fuzzyMatchCrlf = findNormalizedMatch(content, oldString);
+    if (fuzzyMatchCrlf !== null) {
+      throw new Error(
+        `String not found in ${path} (file uses CRLF line endings; exact match required to avoid mixed line endings — include \\r\\n in old_string)`,
+      );
+    }
+    // Fuzzy would fail too — fall through to the closest-lines error below
+  } else {
+    const fuzzyMatch = findNormalizedMatch(content, oldString);
+    if (fuzzyMatch !== null) {
+      const newContent =
+        content.slice(0, fuzzyMatch.start) + newString + content.slice(fuzzyMatch.end);
+      return { newContent, matchType: "fuzzy" };
+    }
   }
 
   // No match at all — provide helpful hints
