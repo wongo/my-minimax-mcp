@@ -9,7 +9,7 @@ import type { ModelId } from "./client/types.js";
 import { calculateCost } from "./client/types.js";
 import { CostTracker } from "./utils/cost-tracker.js";
 import { SessionTracker } from "./utils/session-tracker.js";
-import { calculateCumulativeReport } from "./utils/savings-calculator.js";
+import { calculateCumulativeReport, calculateSavings } from "./utils/savings-calculator.js";
 import { runAgentLoop } from "./agent/loop.js";
 
 const __cliDirname = dirname(fileURLToPath(import.meta.url));
@@ -292,10 +292,19 @@ async function runEndSession(): Promise<void> {
   const totalCost = sessionEntries.reduce((sum, e) => sum + e.cost, 0);
   const sessionId = sessionEntries[0].sessionId ?? sessionEntries[0].timestamp;
 
+  // sessionEntries already have: timestamp, tool, model, tokensUsed, cost — all CostEntryLike fields
+  const savings = calculateSavings(sessionEntries, entries);
   const tracker = new SessionTracker(undefined, sessionTarget);
-  const result = await tracker.end(totalCalls, totalCost, notes, sessionId, process.cwd());
+  const result = await tracker.end(
+    totalCalls,
+    totalCost,
+    notes,
+    sessionId,
+    process.cwd(),
+    { tokensOffloaded: savings.tokensOffloaded.total, equivalentSonnetCalls: savings.equivalentSonnetCalls },
+  );
 
-  console.log(`Session aggregated: ${totalCalls} calls, $${result.entry.cost.toFixed(4)}`);
+  console.log(`Session aggregated: ${totalCalls} calls, ${result.entry.cost.toFixed(4)}`);
   console.log(result.message);
 }
 

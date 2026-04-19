@@ -196,4 +196,20 @@ describe("SessionTracker", () => {
     const r2 = await t2.status(10);
     assert.equal(r2.target, 5);
   });
+
+  // Savings guarantee tests
+  it("end() includes tokensOffloaded=0 and equivalentSonnetCalls=0 when no savingsData provided", async () => {
+    const tracker = new SessionTracker(logPath, 5);
+    const result = await tracker.end(5, 0.03);
+    assert.equal(result.entry.tokensOffloaded, 0);
+    assert.equal(result.entry.equivalentSonnetCalls, 0);
+  });
+
+  it("end() includes passed savingsData values in the recorded entry", async () => {
+    const tracker = new SessionTracker(logPath, 5);
+    const savingsData = { tokensOffloaded: 42_000, equivalentSonnetCalls: 5.2 };
+    const result = await tracker.end(5, 0.03, undefined, undefined, undefined, savingsData);
+    assert.equal(result.entry.tokensOffloaded, 42_000);
+    assert.equal(result.entry.equivalentSonnetCalls, 5.2);
+  });
 });

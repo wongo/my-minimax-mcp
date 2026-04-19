@@ -312,7 +312,7 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (94 tests)
+# Run all tests (96 tests)
 npm test
 
 # Run with coverage report

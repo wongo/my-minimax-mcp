@@ -2,6 +2,12 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 
+// Default savings when not provided — ensures every entry always carries these fields
+export const DEFAULT_SAVINGS: { tokensOffloaded: number; equivalentSonnetCalls: number } = {
+  tokensOffloaded: 0,
+  equivalentSonnetCalls: 0,
+};
+
 export interface SessionEntry {
   date: string;
   sessionId: string;
@@ -102,6 +108,7 @@ export class SessionTracker {
   ): Promise<EndResult> {
     const dynamicTarget = this.computeTarget();
     const targetMet = calls >= dynamicTarget;
+    const savings = savingsData ?? DEFAULT_SAVINGS;
     const entry: SessionEntry = {
       date: new Date().toISOString(),
       sessionId: sessionId ?? new Date().toISOString(),
@@ -110,10 +117,8 @@ export class SessionTracker {
       cost: Math.round(cost * 1_000_000) / 1_000_000,
       targetMet,
       notes: notes ?? (targetMet ? "" : "No root cause provided"),
-      ...(savingsData && {
-        tokensOffloaded: savingsData.tokensOffloaded,
-        equivalentSonnetCalls: savingsData.equivalentSonnetCalls,
-      }),
+      tokensOffloaded: savings.tokensOffloaded,
+      equivalentSonnetCalls: savings.equivalentSonnetCalls,
     };
 
     const persisted = await this.appendEntry(entry);
