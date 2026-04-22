@@ -18,11 +18,12 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (flags.help || flags.h) {
-  console.log(`Usage: node analyze-savings.mjs [--period=7d|30d|all] [--format=markdown|json] [--project=<path>] [--help|-h]
+  console.log(`Usage: node analyze-savings.mjs [--period=7d|30d|all] [--format=markdown|json] [--project=<path>] [--diagnose] [--help|-h]
 
   --period   Period to analyze. 7d (default), 30d, all
   --format   Output format. markdown (default), json
   --project  Filter by project path (absolute)
+  --diagnose Show leverage diagnosis section
   --help     Show this message`);
   process.exit(0);
 }
@@ -30,6 +31,7 @@ if (flags.help || flags.h) {
 const PERIOD = flags.period ?? '7d';
 const FORMAT = flags.format ?? 'markdown';
 const PROJECT_FILTER = flags.project ?? null;
+const DIAGNOSE = flags.diagnose === true || flags.diagnose === 'true';
 const VALID_PERIODS = ['7d', '30d', 'all'];
 if (!VALID_PERIODS.includes(PERIOD)) {
   console.error(`Invalid --period "${PERIOD}". Use: ${VALID_PERIODS.join(', ')}`);
@@ -148,6 +150,20 @@ function readMinimaxData() {
   return readJsonLines(path);
 }
 
+// ─── Per-model breakdown helpers (used for diagnosis) ─────────────────────────
+
+function newModelBucket() {
+  return { inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, outputTokens: 0, total: 0 };
+}
+
+function addToBucket(bucket, input, cacheCreate, cacheRead, output) {
+  bucket.inputTokens += input;
+  bucket.cacheCreationTokens += cacheCreate;
+  bucket.cacheReadTokens += cacheRead;
+  bucket.outputTokens += output;
+  bucket.total += input + cacheCreate + cacheRead + output;
+}
+
 // ─── Process Claude data ─────────────────────────────────────────────────────
 
 function processClaude(rawEntries) {
@@ -158,6 +174,11 @@ function processClaude(rawEntries) {
   const byDate = new Map();
   const byWeek = new Map();
   const byProject = new Map();
+
+  // Per-model breakdowns (for diagnosis)
+  const byModelDate = new Map();
+  const byModelWeek = new Map();
+  const byModelProject = new Map();
 
   for (const entry of rawEntries) {
     if (entry.type !== 'assistant') continue;
@@ -175,39 +196,54 @@ function processClaude(rawEntries) {
     const bucket = modelBucket(entry.message?.model);
     const cwd = entry.cwd ?? null;
 
-    const totalTokens =
-      (usage.input_tokens ?? 0) +
-      (usage.cache_creation_input_tokens ?? 0) +
-      (usage.cache_read_input_tokens ?? 0) +
-      (usage.output_tokens ?? 0);
+    const inputTokens = usage.input_tokens ?? 0;
+    const cacheCreationTokens = usage.cache_creation_input_tokens ?? 0;
+    const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+    const outputTokens = usage.output_tokens ?? 0;
+    const totalTokens = inputTokens + cacheCreationTokens + cacheReadTokens + outputTokens;
 
     if (totalTokens === 0) continue;
 
     const includeEntry = !PROJECT_FILTER || cwd === PROJECT_FILTER;
     if (!includeEntry) continue;
 
-    // Daily
+    // Daily aggregates (existing, unchanged)
     if (!byDate.has(dateKey)) byDate.set(dateKey, { opus: 0, sonnet: 0, haiku: 0, other: 0, total: 0 });
     const dayEntry = byDate.get(dateKey);
     dayEntry[bucket] += totalTokens;
     dayEntry.total += totalTokens;
 
-    // Weekly
+    // Weekly aggregates (existing, unchanged)
     if (!byWeek.has(weekKey)) byWeek.set(weekKey, { opus: 0, sonnet: 0, haiku: 0, other: 0, total: 0 });
     const weekEntry = byWeek.get(weekKey);
     weekEntry[bucket] += totalTokens;
     weekEntry.total += totalTokens;
 
-    // Project
+    // Project aggregates (existing, unchanged)
     if (cwd && !PROJECT_FILTER) {
       if (!byProject.has(cwd)) byProject.set(cwd, { opus: 0, sonnet: 0, haiku: 0, other: 0, total: 0 });
       const pEntry = byProject.get(cwd);
       pEntry[bucket] += totalTokens;
       pEntry.total += totalTokens;
     }
+
+    // ─── Per-model breakdowns (diagnosis) ───────────────────────────────────
+    // Daily breakdown by model
+    if (!byModelDate.has(dateKey)) byModelDate.set(dateKey, { opus: newModelBucket(), sonnet: newModelBucket(), haiku: newModelBucket(), other: newModelBucket() });
+    addToBucket(byModelDate.get(dateKey)[bucket], inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens);
+
+    // Weekly breakdown by model
+    if (!byModelWeek.has(weekKey)) byModelWeek.set(weekKey, { opus: newModelBucket(), sonnet: newModelBucket(), haiku: newModelBucket(), other: newModelBucket() });
+    addToBucket(byModelWeek.get(weekKey)[bucket], inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens);
+
+    // Project breakdown by model
+    if (cwd && !PROJECT_FILTER) {
+      if (!byModelProject.has(cwd)) byModelProject.set(cwd, { opus: newModelBucket(), sonnet: newModelBucket(), haiku: newModelBucket(), other: newModelBucket() });
+      addToBucket(byModelProject.get(cwd)[bucket], inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens);
+    }
   }
 
-  return { byDate, byWeek, byProject };
+  return { byDate, byWeek, byProject, byModelDate, byModelWeek, byModelProject };
 }
 
 // ─── Process MiniMax data ────────────────────────────────────────────────────
@@ -294,6 +330,157 @@ function processMinimax(rawEntries) {
   }
 
   return { byDate, byWeek, byProject, estimatedCount, measuredCount };
+}
+
+// ─── Diagnosis computation ───────────────────────────────────────────────────
+
+const PRICING = {
+  opus:   { input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 },
+  sonnet: { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 },
+  haiku:  { input:  0.80, output:  4.00, cacheRead: 0.08,  cacheWrite:  1.00 },
+  other:  { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 },
+};
+
+function spendFor(modelBucket, breakdown) {
+  const p = PRICING[modelBucket] ?? PRICING.other;
+  return (
+    breakdown.inputTokens * p.input +
+    breakdown.outputTokens * p.output +
+    breakdown.cacheReadTokens * p.cacheRead +
+    breakdown.cacheCreationTokens * p.cacheWrite
+  ) / 1_000_000;
+}
+
+function buildDiagnosis(report, claudeData) {
+  // Aggregate period-level per-model breakdowns
+  const periodModelBreakdown = { opus: newModelBucket(), sonnet: newModelBucket(), haiku: newModelBucket(), other: newModelBucket() };
+  for (const row of report.daily) {
+    for (const model of ['opus', 'sonnet', 'haiku', 'other']) {
+      const fromByModel = claudeData.byModelDate;
+      // We need to accumulate from all daily byModelDate entries
+    }
+  }
+  // Actually aggregate by summing all days' breakdowns
+  const allDates = new Set([...claudeData.byModelDate.keys()]);
+  for (const dateKey of allDates) {
+    const models = claudeData.byModelDate.get(dateKey);
+    if (!models) continue;
+    for (const model of ['opus', 'sonnet', 'haiku', 'other']) {
+      const src = models[model];
+      const dst = periodModelBreakdown[model];
+      addToBucket(dst, src.inputTokens, src.cacheCreationTokens, src.cacheReadTokens, src.outputTokens);
+    }
+  }
+
+  // Compute total Claude spend and per-model spend
+  const totalClaudeSpend = ['opus', 'sonnet', 'haiku', 'other'].reduce((sum, m) => sum + spendFor(m, periodModelBreakdown[m]), 0);
+  const perModelSpend = {};
+  for (const model of ['opus', 'sonnet', 'haiku', 'other']) {
+    perModelSpend[model] = spendFor(model, periodModelBreakdown[model]);
+  }
+
+  // Per-project model dominance (top 10 by total tokens)
+  const projectModelRows = [];
+  const allProjects = [...claudeData.byModelProject.keys()];
+  for (const proj of allProjects) {
+    const models = claudeData.byModelProject.get(proj);
+    if (!models) continue;
+    const total = ['opus', 'sonnet', 'haiku', 'other'].reduce((s, m) => s + models[m].total, 0);
+    if (total === 0) continue;
+    // Compute cache_read tokens (sum across all models)
+    const totalCacheRead = ['opus', 'sonnet', 'haiku', 'other'].reduce((s, m) => s + models[m].cacheReadTokens, 0);
+    projectModelRows.push({
+      project: proj,
+      total,
+      opusPct: (models.opus.total / total) * 100,
+      sonnetPct: (models.sonnet.total / total) * 100,
+      haikuPct: (models.haiku.total / total) * 100,
+      cacheReadPct: (totalCacheRead / total) * 100,
+    });
+  }
+  projectModelRows.sort((a, b) => b.total - a.total);
+  const topProjects = projectModelRows.slice(0, 10);
+
+  // ─── Scenario calculations ───────────────────────────────────────────────
+
+  const opus = periodModelBreakdown.opus;
+  const opusTotal = opus.total;
+  const opusInputSide = opus.inputTokens + opus.cacheCreationTokens + opus.cacheReadTokens;
+
+  // Scenario A: 30% Opus tokens → Sonnet
+  const opusSpend = spendFor('opus', opus);
+  const sonnetEquivSpend = spendFor('sonnet', opus);
+  const scenarioA_Tokens = Math.round(opusTotal * 0.30);
+  const scenarioA_Savings = (opusSpend - sonnetEquivSpend) * 0.30;
+
+  // Scenario B: Opus cache_read ratio → 80%
+  const opusCacheReadRatio = opusInputSide > 0 ? opus.cacheReadTokens / opusInputSide : 0;
+  let scenarioB_Savings = 0;
+  let scenarioB_Tokens = 0;
+  let scenarioB_Description = `If cache_read ratio of Opus reaches 80% (currently ${(opusCacheReadRatio * 100).toFixed(1)}%)`;
+  if (opusCacheReadRatio < 0.80 && opusInputSide > 0) {
+    const targetCacheRead = opusInputSide * 0.80;
+    const extraCacheRead = targetCacheRead - opus.cacheReadTokens;
+    scenarioB_Tokens = Math.round(extraCacheRead);
+    // Simulate new breakdown: shift extraCacheRead proportionally from input + cacheCreation
+    const totalInputSideBefore = opusInputSide;
+    const inputFrac = totalInputSideBefore > 0 ? opus.inputTokens / totalInputSideBefore : 0;
+    const cacheCreateFrac = totalInputSideBefore > 0 ? opus.cacheCreationTokens / totalInputSideBefore : 0;
+    const shiftFromInput = extraCacheRead * inputFrac;
+    const shiftFromCacheCreate = extraCacheRead * cacheCreateFrac;
+    const newBreakdown = {
+      inputTokens: opus.inputTokens - shiftFromInput,
+      cacheCreationTokens: opus.cacheCreationTokens - shiftFromCacheCreate,
+      cacheReadTokens: opus.cacheReadTokens + extraCacheRead,
+      outputTokens: opus.outputTokens,
+    };
+    const newSpend = spendFor('opus', newBreakdown);
+    scenarioB_Savings = opusSpend - newSpend;
+  }
+
+  // Scenario C: MiniMax baseline
+  const scenarioC_Tokens = report.summary.minimaxTokensOffloaded;
+  // Conservative floor: Sonnen input rate × equivalent calls
+  const scenarioC_Savings = report.summary.equivalentSonnetCalls * 8000 / 1_000_000 * PRICING.sonnet.input;
+
+  const scenarioRows = [
+    {
+      label: 'A',
+      description: `If 30% of Opus tokens → Sonnet`,
+      tokenImpact: scenarioA_Tokens.toLocaleString('en-US'),
+      savings: scenarioA_Savings,
+      pctOfCurrentSpend: totalClaudeSpend > 0 ? (scenarioA_Savings / totalClaudeSpend) * 100 : 0,
+    },
+    {
+      label: 'B',
+      description: scenarioB_Description,
+      tokenImpact: scenarioB_Tokens.toLocaleString('en-US'),
+      savings: scenarioB_Savings,
+      pctOfCurrentSpend: totalClaudeSpend > 0 ? (scenarioB_Savings / totalClaudeSpend) * 100 : 0,
+    },
+    {
+      label: 'C',
+      description: 'Current MiniMax offload (baseline)',
+      tokenImpact: scenarioC_Tokens.toLocaleString('en-US'),
+      savings: scenarioC_Savings,
+      pctOfCurrentSpend: totalClaudeSpend > 0 ? (scenarioC_Savings / totalClaudeSpend) * 100 : 0,
+    },
+  ];
+
+  // Sort scenarios by savings descending for recommendations
+  const sortedScenarios = [...scenarioRows].sort((a, b) => b.savings - a.savings);
+
+  return {
+    totalClaudeSpend,
+    perModelSpend,
+    periodModelBreakdown,
+    topProjects,
+    scenarios: scenarioRows,
+    sortedScenarios,
+    opusCacheReadRatio,
+    scenarioA_Tokens,
+    scenarioB_Tokens,
+  };
 }
 
 // ─── Aggregate ───────────────────────────────────────────────────────────────
@@ -419,6 +606,9 @@ function fmt(n) {
 function fmtCost(n) {
   return n === 0 ? '$0' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
+function fmtMoney(n) {
+  return n === 0 ? '$0.00' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 function fmtRatio(n) {
   return n.toFixed(2) + '%';
 }
@@ -486,6 +676,76 @@ function renderMarkdown(report) {
   lines.push('');
   lines.push(`- ${interp}`);
 
+  // ─── Diagnosis section (only when --diagnose) ──────────────────────────────
+  if (DIAGNOSE && report._diagnosis) {
+    const diag = report._diagnosis;
+    lines.push('');
+    lines.push('## 🔍 Leverage Diagnosis');
+    lines.push('');
+    lines.push('### Per-model token composition (period totals)');
+    lines.push('');
+    lines.push('| Model  | Total | Input | Cache create | Cache read | Output | Cache read % | Output % |');
+    lines.push('|--------|------:|------:|-------------:|-----------:|-------:|-------------:|---------:|');
+    const MODELS = ['opus', 'sonnet', 'haiku', 'other'];
+    const modelLabels = { opus: 'opus', sonnet: 'sonnet', haiku: 'haiku', other: 'other' };
+    for (const model of MODELS) {
+      const b = diag.periodModelBreakdown[model];
+      const total = b.total || 1;
+      const cacheReadPct = (b.cacheReadTokens / total * 100).toFixed(1) + '%';
+      const outputPct = (b.outputTokens / total * 100).toFixed(1) + '%';
+      lines.push(`| ${model.padEnd(7)} | ${fmt(b.total).padStart(6)} | ${fmt(b.inputTokens).padStart(5)} | ${fmt(b.cacheCreationTokens).padStart(11)} | ${fmt(b.cacheReadTokens).padStart(9)} | ${fmt(b.outputTokens).padStart(6)} | ${cacheReadPct.padStart(11)} | ${outputPct.padStart(8)} |`);
+    }
+    lines.push('');
+    lines.push('### Per-project model dominance (top 10 by total tokens)');
+    lines.push('');
+    lines.push('| Project | Total | Opus % | Sonnet % | Haiku % | Cache read % |');
+    lines.push('|--------|------:|-------:|---------:|--------:|-------------:|');
+    for (const p of diag.topProjects) {
+      lines.push(`| ${(p.project || '(unknown)').substring(0, 50).padEnd(50)} | ${fmt(p.total).padStart(6)} | ${p.opusPct.toFixed(1).padStart(6)}% | ${p.sonnetPct.toFixed(1).padStart(8)}% | ${p.haikuPct.toFixed(1).padStart(7)}% | ${p.cacheReadPct.toFixed(1).padStart(11)}% |`);
+    }
+    lines.push('');
+    lines.push('### Leverage scenarios (estimated USD savings vs current spend)');
+    lines.push('');
+    lines.push('Pricing assumptions (per million tokens, Claude API list price):');
+    lines.push('- Opus 4.x:   input $15.00, output $75.00, cache_read $1.50,  cache_write $18.75');
+    lines.push('- Sonnet 4.x: input $3.00,  output $15.00, cache_read $0.30,  cache_write $3.75');
+    lines.push('- Haiku 4.x:  input $0.80,  output $4.00,  cache_read $0.08,  cache_write $1.00');
+    lines.push('');
+    const totalSpend = diag.totalClaudeSpend;
+    lines.push(`Current Claude spend (estimated): ${fmtMoney(totalSpend)}`);
+    for (const model of MODELS) {
+      const s = diag.perModelSpend[model];
+      const pct = totalSpend > 0 ? (s / totalSpend) * 100 : 0;
+      lines.push(`- ${model.padEnd(7)} ${fmtMoney(s)} (${pct.toFixed(1)}%)`);
+    }
+    lines.push('');
+    lines.push('| Scenario | Description | Token impact | $ saved | % of current spend |');
+    lines.push('|----------|-------------|-------------:|--------:|-------------------:|');
+    // Use A then B then C ordering as specified in the template
+    const orderedScenarios = ['A', 'B', 'C'];
+    const scenarioMap = {};
+    for (const s of diag.scenarios) scenarioMap[s.label] = s;
+    for (const label of orderedScenarios) {
+      const s = scenarioMap[label];
+      if (!s) continue;
+      lines.push(`| ${label} | ${s.description} | ${s.tokenImpact.padStart(11)} | ${fmtMoney(s.savings).padStart(9)} | ${s.pctOfCurrentSpend.toFixed(1).padStart(15)}% |`);
+    }
+    lines.push('');
+    lines.push('### 槓桿排序與建議');
+    for (let i = 0; i < diag.sortedScenarios.length; i++) {
+      const s = diag.sortedScenarios[i];
+      const rec = s.label === 'A'
+        ? 'Migrate non-reasoning Opus tasks (boilerplate, file reads, simple edits) to Sonnet — biggest single lever.'
+        : s.label === 'B'
+          ? (s.savings > 0
+              ? 'Restructure prompts so cacheable context (system prompts, codebase summaries) sits at the top to lift cache_read ratio.'
+              : 'Already at or above 80% cache_read — no action needed.')
+          : 'Current MiniMax offload — keep observing v1.3.8 rule #1 calibration; expand scope only if A and B are exhausted.';
+      const pct = s.pctOfCurrentSpend;
+      lines.push(`${i + 1}. Scenario ${s.label} (${fmtMoney(s.savings)} saved, ${pct.toFixed(1)}% of spend) — ${rec}`);
+    }
+  }
+
   return lines.join('\n');
 }
 
@@ -503,6 +763,38 @@ function renderJson(report) {
   for (const row of out.weekly) {
     row.offloadRatio = Math.round(row.offloadRatio * 100) / 100;
   }
+  // Include diagnosis in JSON when --diagnose
+  if (DIAGNOSE && report._diagnosis) {
+    const diag = report._diagnosis;
+    out.diagnosis = {
+      claudeSpend: {
+        total: Math.round(diag.totalClaudeSpend * 100) / 100,
+        opus: Math.round((diag.perModelSpend.opus ?? 0) * 100) / 100,
+        sonnet: Math.round((diag.perModelSpend.sonnet ?? 0) * 100) / 100,
+        haiku: Math.round((diag.perModelSpend.haiku ?? 0) * 100) / 100,
+        other: Math.round((diag.perModelSpend.other ?? 0) * 100) / 100,
+      },
+      perModel: ['opus', 'sonnet', 'haiku', 'other'].map(model => {
+        const b = diag.periodModelBreakdown[model];
+        return {
+          model,
+          totalTokens: b.total,
+          inputTokens: b.inputTokens,
+          cacheCreationTokens: b.cacheCreationTokens,
+          cacheReadTokens: b.cacheReadTokens,
+          outputTokens: b.outputTokens,
+        };
+      }),
+      perProject: diag.topProjects,
+      scenarios: diag.scenarios.map(s => ({
+        id: s.label,
+        description: s.description,
+        tokenImpact: s.tokenImpact,
+        dollarsSaved: Math.round(s.savings * 100) / 100,
+        pctOfSpend: Math.round(s.pctOfCurrentSpend * 10) / 10,
+      })),
+    };
+  }
   return JSON.stringify(out, null, 2);
 }
 
@@ -516,6 +808,11 @@ function main() {
   const minimaxData = processMinimax(minimaxRaw);
 
   const report = buildReport(claudeData, minimaxData);
+
+  // Compute diagnosis data if --diagnose
+  if (DIAGNOSE) {
+    report._diagnosis = buildDiagnosis(report, claudeData);
+  }
 
   if (FORMAT === 'json') {
     console.log(renderJson(report));
