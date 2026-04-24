@@ -21,6 +21,8 @@ if (flags.help || flags.h) {
   console.log(`Usage: node analyze-savings.mjs [--period=7d|30d|all] [--format=markdown|json] [--project=<path>] [--diagnose] [--help|-h]
 
   --period   Period to analyze. 7d (default), 30d, all
+  --from     Start date in YYYY-MM-DD format (overrides --period)
+  --to       End date in YYYY-MM-DD format (overrides --period)
   --format   Output format. markdown (default), json
   --project  Filter by project path (absolute)
   --diagnose Show leverage diagnosis section
@@ -32,6 +34,25 @@ const PERIOD = flags.period ?? '7d';
 const FORMAT = flags.format ?? 'markdown';
 const PROJECT_FILTER = flags.project ?? null;
 const DIAGNOSE = flags.diagnose === true || flags.diagnose === 'true';
+
+const FROM = flags.from ?? null;
+const TO = flags.to ?? null;
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+function validateDateFlag(name, val) {
+  if (val === null) return;
+  if (!ISO_RE.test(val)) {
+    console.error(`Invalid --${name} "${val}": expected YYYY-MM-DD format.`);
+    process.exit(1);
+  }
+  if (isNaN(new Date(val + 'T00:00:00Z').getTime())) {
+    console.error(`Invalid --${name} "${val}": not a valid calendar date.`);
+    process.exit(1);
+  }
+}
+validateDateFlag('from', FROM);
+validateDateFlag('to', TO);
+
 const VALID_PERIODS = ['7d', '30d', 'all'];
 if (!VALID_PERIODS.includes(PERIOD)) {
   console.error(`Invalid --period "${PERIOD}". Use: ${VALID_PERIODS.join(', ')}`);
@@ -70,6 +91,28 @@ function isoWeekKey(date) {
 function periodRange() {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
+
+  // Custom date range overrides PERIOD
+  if (FROM !== null || TO !== null) {
+    let from, to;
+    if (FROM !== null) {
+      from = new Date(FROM + 'T00:00:00Z');
+    } else {
+      from = addDays(today, -29);
+    }
+    if (TO !== null) {
+      to = new Date(TO + 'T00:00:00Z');
+    } else {
+      to = today;
+    }
+    if (from > to) {
+      console.error(`Invalid --from/--to range: ${FROM} > ${TO}. --from must be before or equal to --to.`);
+      process.exit(1);
+    }
+    return { from, to };
+  }
+
+  // Default PERIOD logic
   let from;
   if (PERIOD === 'all') {
     from = new Date(0);
@@ -563,9 +606,13 @@ function buildReport(claudeData, minimaxData) {
   projectEntries.sort((a, b) => b.claudeTokens - a.claudeTokens);
   const topProjects = projectEntries.slice(0, 10);
 
+  const isCustom = FROM !== null || TO !== null;
+  const periodLabel = isCustom
+    ? 'custom'
+    : (PERIOD === 'all' ? 'all time' : `last ${PERIOD}`);
   return {
     period: {
-      label: PERIOD === 'all' ? 'all time' : `last ${PERIOD}`,
+      label: periodLabel,
       from: toDateKey(from),
       to: toDateKey(to),
     },
