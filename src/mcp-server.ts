@@ -1,4 +1,4 @@
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -20,6 +20,8 @@ import { plan } from "./tools/plan.js";
 import { webSearch } from "./tools/web-search.js";
 import { understandImage } from "./tools/understand-image.js";
 import { resolveWorkingDirectory } from "./agent/safety.js";
+import { FailureLogger } from "./utils/failure-logger.js";
+import { Telemetry } from "./utils/telemetry.js";
 
 export function loadEnvFile(envPath = process.env.DOTENV_CONFIG_PATH ?? resolve(__dirname, "..", ".env")): void {
   try {
@@ -62,6 +64,9 @@ export function createServer(
   const require = createRequire(import.meta.url);
   const pkg = require("../package.json") as { version: string };
 
+  const failureLogger = new FailureLogger(undefined, costTracker.sessionId);
+  const telemetry = new Telemetry(undefined, costTracker.sessionId);
+
   const server = new McpServer({
     name: "my-minimax-mcp",
     version: pkg.version,
@@ -78,10 +83,24 @@ export function createServer(
       context: z.string().optional().describe("Additional context about the codebase or requirements"),
     },
     async (input) => {
+      const start = Date.now();
       try {
         const result = await generateCode(client, costTracker, workingDirectory, input);
+        await telemetry.recordSuccess({
+          tool: "minimax_generate_code",
+          durationMs: Date.now() - start,
+          model: input.model ?? defaultModel,
+          callerProject: basename(workingDirectory),
+        });
         return { content: [{ type: "text", text: result }] };
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_generate_code",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+          model: input.model ?? defaultModel,
+        });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
@@ -100,7 +119,10 @@ export function createServer(
       },
     },
     async (input, extra) => {
+      const start = Date.now();
+      let resolvedWorkingDir: string | undefined;
       try {
+        resolvedWorkingDir = resolveWorkingDirectory(input.workingDirectory, workingDirectory);
         const progressToken = extra._meta?.progressToken;
         const onProgress = progressToken !== undefined
           ? async (info: { iteration: number; maxIterations: number; lastAction: string; message: string }) => {
@@ -116,17 +138,57 @@ export function createServer(
             }
           : undefined;
 
-        const result = await agentTask(
+        const resultJson = await agentTask(
           client,
           costTracker,
           {
             ...input,
-            workingDirectory: resolveWorkingDirectory(input.workingDirectory, workingDirectory),
+            workingDirectory: resolvedWorkingDir,
           },
           onProgress,
         );
-        return { content: [{ type: "text", text: result }] };
+
+        // Parse the agent result to check for soft failures (iteration_limit)
+        let parsedResult: { success?: boolean; reason?: string; iterations?: number; tokensUsed?: { inputTokens: number; outputTokens: number } } = {};
+        try {
+          parsedResult = JSON.parse(resultJson) as typeof parsedResult;
+        } catch {
+          // not JSON — ignore
+        }
+
+        const durationMs = Date.now() - start;
+        const model = input.model ?? defaultModel;
+        const callerProject = basename(resolvedWorkingDir);
+
+        await telemetry.recordSuccess({
+          tool: "minimax_agent_task",
+          durationMs,
+          model,
+          callerProject,
+          iterationsUsed: parsedResult.iterations,
+          tokensUsed: parsedResult.tokensUsed,
+        });
+
+        // Soft failure: task completed (no exception) but hit iteration limit
+        if (parsedResult.reason === "iteration_limit") {
+          await failureLogger.record({
+            tool: "minimax_agent_task",
+            error: new Error(`Reached maximum iterations`),
+            toolInput: { task: input.task, maxIterations: input.maxIterations },
+            workingDirectory: resolvedWorkingDir,
+            model,
+          });
+        }
+
+        return { content: [{ type: "text", text: resultJson }] };
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_agent_task",
+          error: err,
+          toolInput: { task: input.task, workingDirectory: input.workingDirectory, maxIterations: input.maxIterations },
+          workingDirectory: resolvedWorkingDir,
+          model: input.model ?? defaultModel,
+        });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
@@ -142,10 +204,24 @@ export function createServer(
       systemPrompt: z.string().optional().describe("System prompt (only for new conversations)"),
     },
     async (input) => {
+      const start = Date.now();
       try {
         const result = await chat(client, conversationStore, costTracker, input);
+        await telemetry.recordSuccess({
+          tool: "minimax_chat",
+          durationMs: Date.now() - start,
+          model: input.model ?? defaultModel,
+          callerProject: basename(workingDirectory),
+        });
         return { content: [{ type: "text", text: result }] };
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_chat",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+          model: input.model ?? defaultModel,
+        });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
@@ -160,10 +236,24 @@ export function createServer(
       model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
     },
     async (input) => {
+      const start = Date.now();
       try {
         const result = await plan(client, costTracker, input);
+        await telemetry.recordSuccess({
+          tool: "minimax_plan",
+          durationMs: Date.now() - start,
+          model: input.model ?? defaultModel,
+          callerProject: basename(workingDirectory),
+        });
         return { content: [{ type: "text", text: result }] };
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_plan",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+          model: input.model ?? defaultModel,
+        });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
@@ -204,10 +294,22 @@ export function createServer(
       query: z.string().describe("Search query"),
     },
     async (input) => {
+      const start = Date.now();
       try {
         const result = await webSearch(codingPlanClient, costTracker, input);
+        await telemetry.recordSuccess({
+          tool: "minimax_web_search",
+          durationMs: Date.now() - start,
+          callerProject: basename(workingDirectory),
+        });
         return { content: [{ type: "text" as const, text: result }] };
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_web_search",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+        });
         return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
@@ -221,10 +323,22 @@ export function createServer(
       imageSource: z.string().describe("Image URL (HTTP/HTTPS), local file path, or base64 data URL"),
     },
     async (input) => {
+      const start = Date.now();
       try {
         const result = await understandImage(codingPlanClient, costTracker, input);
+        await telemetry.recordSuccess({
+          tool: "minimax_understand_image",
+          durationMs: Date.now() - start,
+          callerProject: basename(workingDirectory),
+        });
         return { content: [{ type: "text" as const, text: result }] };
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_understand_image",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+        });
         return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },
@@ -247,10 +361,16 @@ export function createServer(
       notes: z.string().optional().describe("For 'end': root cause if target missed (required when missing)"),
     },
     async (input) => {
+      const start = Date.now();
       try {
         switch (input.command) {
           case "start": {
             const result = await sessionTracker.start();
+            await telemetry.recordSuccess({
+              tool: "minimax_session_tracker",
+              durationMs: Date.now() - start,
+              callerProject: basename(workingDirectory),
+            });
             return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
           }
           case "end": {
@@ -263,15 +383,31 @@ export function createServer(
               report.callCount, report.totalCost, input.notes,
               costTracker.sessionId, projectDir, savingsData,
             );
+            await telemetry.recordSuccess({
+              tool: "minimax_session_tracker",
+              durationMs: Date.now() - start,
+              callerProject: basename(workingDirectory),
+            });
             return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
           }
           case "status": {
             const report = costTracker.getReport();
             const result = await sessionTracker.status(report.callCount);
+            await telemetry.recordSuccess({
+              tool: "minimax_session_tracker",
+              durationMs: Date.now() - start,
+              callerProject: basename(workingDirectory),
+            });
             return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
           }
         }
       } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_session_tracker",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+        });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
       }
     },

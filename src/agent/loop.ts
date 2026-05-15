@@ -30,6 +30,7 @@ export interface AgentTaskResult {
   iterations: number;
   tokensUsed: TokenUsage;
   cost: number;
+  reason?: "iteration_limit" | "timeout" | "task_complete" | "task_failed" | "no_tool_calls";
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert software engineer executing a coding task. You have access to tools for reading files, writing files, editing files, running shell commands, listing files, and searching code.
@@ -106,6 +107,7 @@ export async function runAgentLoop(
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
+        reason: "timeout",
       };
     }
 
@@ -138,6 +140,7 @@ export async function runAgentLoop(
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
+        reason: "iteration_limit",
       };
     }
 
@@ -152,6 +155,7 @@ export async function runAgentLoop(
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
+        reason: "no_tool_calls",
       };
     }
 
@@ -189,6 +193,7 @@ export async function runAgentLoop(
             iterations,
             tokensUsed: totalUsage,
             cost: calculateCost(totalUsage, model),
+            reason: "task_complete",
           };
         }
         if (toolCall.function.name === "task_failed") {
@@ -200,6 +205,7 @@ export async function runAgentLoop(
             iterations,
             tokensUsed: totalUsage,
             cost: calculateCost(totalUsage, model),
+            reason: "task_failed",
           };
         }
       } catch (err) {
@@ -221,5 +227,6 @@ export async function runAgentLoop(
     iterations,
     tokensUsed: totalUsage,
     cost: calculateCost(totalUsage, model),
+    reason: "iteration_limit",
   };
 }

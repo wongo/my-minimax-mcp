@@ -5,6 +5,8 @@ dist/
 
 # Local / private files
 docs/facebook-posts.md
+docs/fb-post-*.md
+docs/fb-posting-*.md
 .mcp.json
 supabase/
 HANDOFF.md
@@ -17,3 +19,8 @@ mempalace.yaml
 test/**/*.js
 test/**/*.js.map
 test/**/*.d.ts
+
+# Failure / telemetry logs (contain runtime data, may have sanitized but still semi-private info)
+logs/*.jsonl
+logs/*.gz
+!logs/.gitkeep
