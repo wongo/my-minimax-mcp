@@ -186,7 +186,7 @@ export function createServer(
           tool: "minimax_agent_task",
           error: err,
           toolInput: { task: input.task, workingDirectory: input.workingDirectory, maxIterations: input.maxIterations },
-          workingDirectory: resolvedWorkingDir,
+          workingDirectory: resolvedWorkingDir ?? input.workingDirectory,
           model: input.model ?? defaultModel,
         });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
