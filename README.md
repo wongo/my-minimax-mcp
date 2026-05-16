@@ -404,6 +404,41 @@ scripts/
 logs/                       # Runtime JSONL files (gitignored)
 ```
 
+## Changelog
+
+### v1.4.0 (2026-05-17)
+
+**Failure Logging & Telemetry**
+- Every tool call (success, failure, retry) is now recorded to monthly JSONL logs in `logs/`
+- 8 error categories: `path_invalid`, `sandbox_violation`, `edit_file_no_match`, `iteration_limit`, `api_5xx`, `network_timeout`, `auth_error`, `unknown`
+- Secrets scrubbing — API keys, Bearer tokens, JWTs never reach logs
+- Deduplication fingerprints — identical bugs collapse into one entry
+- Per-caller attribution — failures attributed to the calling project by working directory
+- New `scripts/analyze-failures.mjs` digest with 7 sections: summary, categories, fingerprints, per-tool, per-caller, retry effectiveness, quick wins
+
+**Bug Fixes**
+- Fixed `sandbox_violation` not being captured by failure logger (validation now inside try block)
+- Fixed `callerProject` showing as `(unknown)` for sandbox violations — falls back to raw input path
+- Fixed `MINIMAX_WORKING_DIR` defaulting to minimax project dir, blocking all cross-project `agent_task` calls; `run-mcp.sh` now sets it to `~/Projects`
+
+**Internals**
+- `retry.ts`: added `onAttempt` callback for retry telemetry
+- `agent/loop.ts`: added `reason` field to `AgentTaskResult` (`iteration_limit`, `timeout`, `task_complete`, `task_failed`, `no_tool_calls`)
+- 148 tests (up from 96)
+
+### v1.3.8
+
+- Guaranteed `tokensOffloaded` in every session cost report
+- Added savings analyzer (`scripts/analyze-savings.mjs`) with `--diagnose` and date range flags
+- Hardened launcher script; failure logging foundation
+
+### v1.3.6 – v1.3.7
+
+- `edit_file` fuzzy match (CRLF / trailing-space tolerant) with closest-3-lines hints on failure
+- `edit_file_batch` for atomic multi-point edits in a single iteration
+- Routing calibration: raised Sonnet threshold from 5-file to cross-cutting refactor only
+- `minimax_session_tracker` auto-persists on shutdown (no manual `end` required)
+
 ## License
 
 MIT

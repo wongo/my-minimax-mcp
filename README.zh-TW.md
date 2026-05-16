@@ -400,6 +400,41 @@ scripts/
 logs/                       # 執行時 JSONL（gitignored）
 ```
 
+## 更新紀錄
+
+### v1.4.0（2026-05-17）
+
+**失敗日誌與遙測**
+- 每次工具呼叫（成功、失敗、重試）自動寫入月度 JSONL log（`logs/` 目錄）
+- 8 種錯誤分類：`path_invalid`、`sandbox_violation`、`edit_file_no_match`、`iteration_limit`、`api_5xx`、`network_timeout`、`auth_error`、`unknown`
+- Secrets scrubbing — API key、Bearer token、JWT 不會寫入 log
+- 去重複指紋 — 相同 bug 合併為一筆
+- 呼叫者歸因 — 依 workingDirectory 識別是哪個專案呼叫
+- 新增 `scripts/analyze-failures.mjs`，輸出 7 個區塊：摘要、分類、指紋、工具分析、呼叫者分析、重試效果、Quick Wins
+
+**Bug 修復**
+- 修復 `sandbox_violation` 未被 failure logger 捕捉（驗證移入 try block）
+- 修復 sandbox violation 時 `callerProject` 顯示 `(unknown)`，改為 fallback 至原始輸入路徑
+- 修復 `MINIMAX_WORKING_DIR` 預設為 minimax 專案目錄，導致跨專案 `agent_task` 全部失敗；`run-mcp.sh` 改設為 `~/Projects`
+
+**內部改動**
+- `retry.ts`：新增 `onAttempt` callback 支援重試遙測
+- `agent/loop.ts`：`AgentTaskResult` 新增 `reason` 欄位（`iteration_limit`、`timeout`、`task_complete`、`task_failed`、`no_tool_calls`）
+- 測試數量 96 → 148
+
+### v1.3.8
+
+- Session cost report 保證包含 `tokensOffloaded`
+- 新增節省量分析工具（`scripts/analyze-savings.mjs`），支援 `--diagnose` 和日期範圍 flag
+- 強化 launcher 腳本；失敗日誌基礎架構
+
+### v1.3.6 – v1.3.7
+
+- `edit_file` 模糊比對（CRLF / 尾空白容錯），失敗時提供最近 3 行提示
+- `edit_file_batch` 支援單次迭代原子性多點修改
+- 路由校準：Sonnet 門檻從 5 個檔案提升至跨切面重構才觸發
+- `minimax_session_tracker` 關閉時自動持久化（不需手動呼叫 `end`）
+
 ## 授權
 
 MIT
