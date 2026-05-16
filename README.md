@@ -186,6 +186,48 @@ Add to `~/.claude/settings.json` hooks:
 
 Set `MINIMAX_DEFAULT_MODEL` to the highest model your Token Plan supports. All MiniMax tools inherit this value by default, and the API will reject models not available on your plan.
 
+## Failure Logging & Telemetry
+
+Every tool call outcome (success, failure, retry) is automatically recorded to the `logs/` directory — no configuration needed.
+
+### Log Files
+
+| File | Contents |
+|------|----------|
+| `logs/failures-YYYY-MM.jsonl` | Failure records (error category, fingerprint, caller project) |
+| `logs/success-YYYY-MM.jsonl` | Success records (tool, duration, model, iterations) |
+| `logs/retries-YYYY-MM.jsonl` | Retry records (attempt count, final outcome) |
+
+Files rotate monthly. The `logs/` directory is gitignored.
+
+### Error Categories (8 types)
+
+`path_invalid` · `sandbox_violation` · `edit_file_no_match` · `iteration_limit` · `api_5xx` · `network_timeout` · `auth_error` · `unknown`
+
+### Digest Analysis
+
+```bash
+# This month's digest (7 sections)
+node scripts/analyze-failures.mjs
+
+# Specific month
+node scripts/analyze-failures.mjs --month 2026-05
+
+# Custom date range
+node scripts/analyze-failures.mjs --from 2026-05-01 --to 2026-05-15
+
+# JSON output (for machine processing)
+node scripts/analyze-failures.mjs --json
+```
+
+Output sections: **Summary** (total calls / success rate), **Top categories**, **Top fingerprints** (deduplicated bugs), **Per-tool**, **Per-caller** (which project called), **Retry effectiveness**, **Quick wins** (high-frequency issues with success rate < 80%).
+
+### Environment Variable Override
+
+| Variable | Description |
+|----------|-------------|
+| `MINIMAX_FAILURE_LOG_DIR` | Custom log directory (default: `<project-root>/logs`) |
+
 ## Token Savings Tracking
 
 Every MiniMax call is tracked, and the savings are computed automatically. This includes normal CLI runs as well as MCP server usage. Use `minimax_cost_report` to see real-time savings per session, or run the CLI for cumulative reports.
@@ -312,14 +354,14 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (96 tests)
+# Run all tests (148 tests)
 npm test
 
 # Run with coverage report
 npm run coverage
 ```
 
-Unit tests cover safety validation, cost tracking, file writing, server initialization, session tracking, image utilities, the Coding Plan client, and the savings calculator (adaptive averaging, cumulative grouping, tool breakdown). Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
+Unit tests cover safety validation, cost tracking, file writing, server initialization, session tracking, image utilities, the Coding Plan client, the savings calculator, and the failure logging system (error classification, secrets scrubbing, telemetry, retry tracking). Coverage report uses Node.js built-in test coverage (`--experimental-test-coverage`).
 
 ## Project Structure
 
@@ -352,7 +394,14 @@ src/
     ├── file-writer.ts      # Safe file writing
     ├── image.ts            # Image to base64 data URL conversion
     ├── savings-calculator.ts # Token savings computation (self-adaptive)
-    └── retry.ts            # Exponential backoff retry
+    ├── failure-logger.ts   # Failure JSONL logging (scrubbing, fingerprints, monthly rotation)
+    ├── telemetry.ts        # Success / retry telemetry recording
+    ├── error-classifier.ts # Error classification (8 categories)
+    ├── secrets-scrubber.ts # Sensitive data redaction
+    └── retry.ts            # Exponential backoff retry (with onAttempt callback)
+scripts/
+└── analyze-failures.mjs    # Monthly failure & telemetry digest analyzer
+logs/                       # Runtime JSONL files (gitignored)
 ```
 
 ## License
