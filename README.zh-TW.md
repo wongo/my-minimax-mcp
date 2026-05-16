@@ -182,6 +182,48 @@ npx my-minimax-mcp --end-session
 
 將 `MINIMAX_DEFAULT_MODEL` 設為你的 Token Plan 支援的最高模型。所有 MiniMax 工具現在都會預設繼承這個值；不在你 plan 範圍的模型，API 會自動拒絕。
 
+## 失敗日誌與遙測
+
+每次工具呼叫的結果（成功、失敗、重試）都會自動記錄到 `logs/` 目錄，無需任何設定。
+
+### Log 檔案
+
+| 檔案 | 內容 |
+|------|------|
+| `logs/failures-YYYY-MM.jsonl` | 失敗紀錄（錯誤分類、指紋、呼叫者專案） |
+| `logs/success-YYYY-MM.jsonl` | 成功紀錄（工具、耗時、model、迭代次數） |
+| `logs/retries-YYYY-MM.jsonl` | 重試紀錄（嘗試次數、是否最終成功） |
+
+月度自動輪轉，`logs/` 目錄已加入 `.gitignore`。
+
+### 錯誤分類（8 種）
+
+`path_invalid` · `sandbox_violation` · `edit_file_no_match` · `iteration_limit` · `api_5xx` · `network_timeout` · `auth_error` · `unknown`
+
+### Digest 分析
+
+```bash
+# 本月摘要（7 個區塊）
+node scripts/analyze-failures.mjs
+
+# 指定月份
+node scripts/analyze-failures.mjs --month 2026-05
+
+# 自訂日期範圍
+node scripts/analyze-failures.mjs --from 2026-05-01 --to 2026-05-15
+
+# JSON 輸出（供機器處理）
+node scripts/analyze-failures.mjs --json
+```
+
+輸出區塊：**Summary**（總呼叫數 / 成功率）、**Top categories**、**Top fingerprints**（去重複 bug）、**Per-tool**、**Per-caller**（呼叫者專案）、**Retry effectiveness**、**Quick wins**（成功率 < 80% 的高頻問題）。
+
+### 環境變數覆寫
+
+| 變數 | 說明 |
+|------|------|
+| `MINIMAX_FAILURE_LOG_DIR` | 自訂 log 目錄（預設：`<project-root>/logs`） |
+
 ## Token 節省追蹤
 
 每次 MiniMax 呼叫都會被追蹤，節省量自動計算。這包含一般 CLI 執行與 MCP 伺服器使用。使用 `minimax_cost_report` 查看即時 session 節省量，或用 CLI 查看歷史累計報告。
@@ -308,14 +350,14 @@ MiniMax API 定價（每 1M 權杖）：
 ## 測試
 
 ```bash
-# 執行所有測試（94 項測試）
+# 執行所有測試（148 項測試）
 npm test
 
 # 產生覆蓋率報告
 npm run coverage
 ```
 
-單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化、session 追蹤、圖片工具、Coding Plan 客戶端和節省量計算器（自適應平均、累計分組、工具分析）。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
+單元測試涵蓋安全驗證、費用追蹤、檔案寫入、伺服器初始化、session 追蹤、圖片工具、Coding Plan 客戶端、節省量計算器，以及錯誤分類、secrets scrubbing、失敗記錄、遙測和重試追蹤。覆蓋率報告使用 Node.js 內建的測試覆蓋率（`--experimental-test-coverage`）。
 
 ## 專案結構
 
@@ -348,7 +390,14 @@ src/
     ├── file-writer.ts      # 安全檔案寫入
     ├── image.ts            # 圖片轉 base64 data URL
     ├── savings-calculator.ts # Token 節省量計算（自適應）
-    └── retry.ts            # 指數退避重試
+    ├── failure-logger.ts   # 失敗 JSONL 紀錄（scrubbing、指紋、月度輪轉）
+    ├── telemetry.ts        # 成功 / 重試遙測紀錄
+    ├── error-classifier.ts # 錯誤分類（8 種類別）
+    ├── secrets-scrubber.ts # 敏感資料清除
+    └── retry.ts            # 指數退避重試（含 onAttempt callback）
+scripts/
+└── analyze-failures.mjs    # 月度失敗 & 遙測 digest 分析器
+logs/                       # 執行時 JSONL（gitignored）
 ```
 
 ## 授權
