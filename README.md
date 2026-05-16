@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/npm/l/my-minimax-mcp.svg)](https://github.com/wongo/my-minimax-mcp/blob/main/LICENSE)
 [![CI](https://github.com/wongo/my-minimax-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/wongo/my-minimax-mcp/actions/workflows/ci.yml)
 
-[English](README.md) | [繁體中文](README.zh-TW.md)
+[English](README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wongo/my-minimax-mcp/main/assets/banner.png" alt="Token costs burning vs MiniMax workflow efficiency" width="600">
