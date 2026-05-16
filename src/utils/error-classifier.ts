@@ -41,7 +41,7 @@ const PATTERNS: Array<{ category: ErrorCategory; pattern: RegExp }> = [
 
 export function classifyError(err: unknown): ErrorCategory {
   const message = err instanceof Error
-    ? `${err.message} ${err.stack ?? ""}`.trim()
+    ? `${err.name} ${err.message}`.trim()
     : String(err);
 
   for (const { category, pattern } of PATTERNS) {
