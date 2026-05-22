@@ -6,6 +6,7 @@ export type ErrorCategory =
   | "api_5xx"
   | "network_timeout"
   | "auth_error"
+  | "content_filtered"
   | "unknown";
 
 const PATTERNS: Array<{ category: ErrorCategory; pattern: RegExp }> = [
@@ -36,6 +37,10 @@ const PATTERNS: Array<{ category: ErrorCategory; pattern: RegExp }> = [
   {
     category: "path_invalid",
     pattern: /ENOENT|no such file|path must be absolute|not a directory|invalid path|file not found|directory not found|ENOTDIR/i,
+  },
+  {
+    category: "content_filtered",
+    pattern: /output new_sensitive|content.?filter|sensitive.?content|content.?policy|request.*blocked.*policy/i,
   },
 ];
 

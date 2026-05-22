@@ -91,6 +91,16 @@ test("classifyError: status 403 object → auth_error", () => {
   assert.equal(classifyError(err), "auth_error");
 });
 
+// ─── content_filtered ────────────────────────────────────────────────────────
+
+test("classifyError: output new_sensitive → content_filtered", () => {
+  assert.equal(classifyError(new Error("output new_sensitive")), "content_filtered");
+});
+
+test("classifyError: content filter → content_filtered", () => {
+  assert.equal(classifyError(new Error("content filter triggered")), "content_filtered");
+});
+
 // ─── unknown ─────────────────────────────────────────────────────────────────
 
 test("classifyError: generic unknown error → unknown", () => {
