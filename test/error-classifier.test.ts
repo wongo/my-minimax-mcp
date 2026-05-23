@@ -76,6 +76,14 @@ test("classifyError: AbortError → network_timeout", () => {
   assert.equal(classifyError(err), "network_timeout");
 });
 
+test("classifyError: Request timed out. → network_timeout", () => {
+  assert.equal(classifyError(new Error("Request timed out.")), "network_timeout");
+});
+
+test("classifyError: read timeout → network_timeout", () => {
+  assert.equal(classifyError(new Error("read timeout after 30s")), "network_timeout");
+});
+
 // ─── auth_error ───────────────────────────────────────────────────────────────
 
 test("classifyError: 401 Unauthorized → auth_error", () => {

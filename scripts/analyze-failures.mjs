@@ -13,6 +13,52 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Mirror of src/utils/error-classifier.ts PATTERNS — keep in sync
+const RECLASSIFY_PATTERNS = [
+  {
+    category: "sandbox_violation",
+    pattern: /path escapes working directory|outside working directory|path escapes|sandbox violation/i,
+  },
+  {
+    category: "edit_file_no_match",
+    pattern: /old_string not found|fuzzy match failed|edit failed.*not match|string.*not found.*file|closest matches|no match found for edit/i,
+  },
+  {
+    category: "iteration_limit",
+    pattern: /maxIterations|iteration limit|max iterations exceeded|reached maximum iterations/i,
+  },
+  {
+    category: "api_5xx",
+    pattern: /\b5\d{2}\b|server error|service unavailable|529|internal server error|bad gateway|gateway timeout/i,
+  },
+  {
+    category: "network_timeout",
+    pattern: /ETIMEDOUT|AbortError|timeout|timed out|ECONNRESET|ECONNREFUSED|network.*timeout|fetch.*timeout|read timeout|request timed out/i,
+  },
+  {
+    category: "auth_error",
+    pattern: /\b401\b|\b403\b|unauthorized|forbidden|invalid api key|invalid_api_key|authentication.*failed/i,
+  },
+  {
+    category: "path_invalid",
+    pattern: /ENOENT|no such file|path must be absolute|not a directory|invalid path|file not found|directory not found|ENOTDIR/i,
+  },
+  {
+    category: "content_filtered",
+    pattern: /output new_sensitive|content.?filter|sensitive.?content|content.?policy|request.*blocked.*policy/i,
+  },
+];
+
+function reclassify(record) {
+  const message = `${record.errorMessage}`;
+  for (const { category, pattern } of RECLASSIFY_PATTERNS) {
+    if (pattern.test(message)) {
+      return category;
+    }
+  }
+  return "unknown";
+}
+
 // ─── CLI parsing ─────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -117,9 +163,15 @@ function compute() {
 
   // ─ 2. Top categories ─────────────────────────────────────────────────────
   const categoryCounts = {};
+  const deltaMap = {};
   for (const r of failures) {
-    const cat = r.category ?? 'unknown';
+    const cat = reclassify(r);
+    const orig = r.category ?? 'unknown';
     categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+    if (orig !== cat) {
+      const key = `${orig}→${cat}`;
+      deltaMap[key] = (deltaMap[key] ?? 0) + 1;
+    }
   }
   const topCategories = Object.entries(categoryCounts)
     .sort((a, b) => b[1] - a[1])
@@ -205,8 +257,9 @@ function compute() {
   // ─ 7. Quick wins ─────────────────────────────────────────────────────────
   const toolCategoryStats = {};
   for (const r of failures) {
-    const key = `${r.tool}|${r.category ?? 'unknown'}`;
-    if (!toolCategoryStats[key]) toolCategoryStats[key] = { tool: r.tool, category: r.category ?? 'unknown', failures: 0, successes: 0 };
+    const cat = reclassify(r);
+    const key = `${r.tool}|${cat}`;
+    if (!toolCategoryStats[key]) toolCategoryStats[key] = { tool: r.tool, category: cat, failures: 0, successes: 0 };
     toolCategoryStats[key].failures++;
   }
   for (const r of successes) {
@@ -234,6 +287,7 @@ function compute() {
     perCaller,
     retry: { totalRetries, retrySuccesses, retrySuccessRate, categoryBreakdown: retryCategoryBreakdown },
     quickWins,
+    reclassifyDeltas: deltaMap,
   };
 }
 
@@ -254,7 +308,7 @@ function pad(s, n, right = false) {
 
 function renderMarkdown(data) {
   const lines = [];
-  const { summary, topCategories, topFingerprints, perTool, perCaller, retry, quickWins } = data;
+  const { summary, topCategories, topFingerprints, perTool, perCaller, retry, quickWins, reclassifyDeltas } = data;
 
   const noData = summary.total === 0 && retry.totalRetries === 0;
   if (noData) {
@@ -361,6 +415,24 @@ function renderMarkdown(data) {
     lines.push('|------|----------|----------:|-------------|');
     for (const r of quickWins) {
       lines.push(`| ${pad(r.tool, 30)} | ${pad(r.category, 22)} | ${pad(r.failures, 9, true)} | ${pad(pct(r.successRate), 12, true)} |`);
+    }
+  }
+  lines.push('');
+
+  // 8. Re-classification deltas
+  lines.push('## 8. Re-classification Deltas');
+  lines.push('');
+  lines.push('(records whose stored category differed from current rules)');
+  lines.push('');
+  const deltaEntries = Object.entries(reclassifyDeltas).sort((a, b) => b[1] - a[1]);
+  if (deltaEntries.length === 0) {
+    lines.push('All stored categories match current rules.');
+  } else {
+    lines.push('| Original | Reclassified | Count |');
+    lines.push('|----------|-------------|------:|');
+    for (const [key, count] of deltaEntries) {
+      const [orig, recat] = key.split('→');
+      lines.push(`| ${pad(orig, 10)} | ${pad(recat, 11)} | ${pad(count, 4, true)} |`);
     }
   }
   lines.push('');

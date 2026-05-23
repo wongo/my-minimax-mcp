@@ -28,7 +28,7 @@ const PATTERNS: Array<{ category: ErrorCategory; pattern: RegExp }> = [
   },
   {
     category: "network_timeout",
-    pattern: /ETIMEDOUT|AbortError|timeout|ECONNRESET|ECONNREFUSED|network.*timeout|fetch.*timeout/i,
+    pattern: /ETIMEDOUT|AbortError|timeout|timed out|ECONNRESET|ECONNREFUSED|network.*timeout|fetch.*timeout|read timeout|request timed out/i,
   },
   {
     category: "auth_error",
