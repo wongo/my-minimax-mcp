@@ -406,6 +406,23 @@ logs/                       # 実行時 JSONL ファイル（gitignore 設定済
 
 ## 更新履歴
 
+### v1.5.0（2026-05-24）
+
+**オブザーバビリティ改善**
+- `analyze-failures.mjs` が読み込み時に最新ルールで過去レコードを再分類 — クラシファイアのパターン更新が自動的に履歴ログへ反映
+- ダイジェストに**セクション 8「再分類デルタ」**を新設 — 保存カテゴリと現行ルールの差分件数を表示
+- `network_timeout` パターンに `"Request timed out."` や `"read timeout"` のバリアントを追加（これまで `unknown` に分類されていた）
+- リトライテレメトリが実際に記録されるようになりました — 5 つのツール（`web-search`・`chat`・`generate-code`・`understand-image`・`plan`）が `withRetry()` に `onAttempt` を渡し、失敗試行を `telemetry.recordRetry()` でログ記録；`retries-YYYY-MM.jsonl` にデータが蓄積されます
+
+**`iteration_limit` の診断情報**
+- `reason === "iteration_limit"` 時の `AgentTaskResult` に `diagnostics` を追加：直近 3 アクション・変更済みファイル一覧・`stillProgressing` ヒューリスティック・次のアクションの提案（「maxIterations=N で再試行」または「タスクを分割してください」）
+- iteration_limit 時の `filesChanged` が常に `[]` だった問題を修正 — 実際の書き込み追跡から生成
+- `maxIterations < 10` が指定された場合に stderr へ警告を出力
+- iteration_limit の失敗ログエントリに診断ペイロードを含めるように
+
+**テスト**
+- テスト数：152 → 161（`agent-loop` 診断ヘルパー 8 件 + クロスプロジェクト `resolveWorkingDirectory` リグレッションテスト 1 件）
+
 ### v1.4.0（2026-05-17）
 
 **失敗ログとテレメトリ**

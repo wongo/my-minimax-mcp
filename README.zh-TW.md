@@ -402,6 +402,23 @@ logs/                       # 執行時 JSONL（gitignored）
 
 ## 更新紀錄
 
+### v1.5.0（2026-05-24）
+
+**可觀測性改善**
+- `analyze-failures.mjs` 讀取時用最新規則重新分類歷史記錄 — classifier pattern 更新後自動反映到舊 log
+- 新增**第 8 節「重分類 Delta」** — 顯示與儲存分類不同的記錄筆數
+- `network_timeout` 補上 `"Request timed out."` 及 `"read timeout"` 變體（先前落入 `unknown`）
+- 重試遙測終於真正記錄 — 5 個工具（`web-search`、`chat`、`generate-code`、`understand-image`、`plan`）改為傳遞 `onAttempt` 給 `withRetry()`，失敗試行透過 `telemetry.recordRetry()` 寫入；`retries-YYYY-MM.jsonl` 開始有資料
+
+**`iteration_limit` 診斷資訊**
+- `reason === "iteration_limit"` 時 `AgentTaskResult` 新增 `diagnostics`：最後 3 個 action、已修改檔案清單、`stillProgressing` 啟發式判斷、可讀建議（「調高 maxIterations=N 重試」或「拆分任務」）
+- 修復 iteration_limit 的 `filesChanged` 固定為 `[]` — 改從追蹤的寫入記錄生成
+- `maxIterations < 10` 時輸出 stderr 警告
+- iteration_limit 失敗日誌加入診斷 payload 供日後分析
+
+**測試**
+- 測試數量 152 → 161（`agent-loop` 診斷輔助函式 8 件 + 跨專案 `resolveWorkingDirectory` regression test 1 件）
+
 ### v1.4.0（2026-05-17）
 
 **失敗日誌與遙測**
