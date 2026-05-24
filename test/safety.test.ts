@@ -36,6 +36,18 @@ test("resolveWorkingDirectory rejects directories outside the configured base di
   );
 });
 
+// Regression: MINIMAX_WORKING_DIR=/home/.../Projects should allow any sub-project
+// (broken before fix in 8ff8a18 when base was set to the minimax project itself)
+test("resolveWorkingDirectory allows sibling sub-projects when base is the parent Projects dir", () => {
+  const base = "/tmp/Projects";
+  assert.equal(resolveWorkingDirectory("/tmp/Projects/app-a", base), "/tmp/Projects/app-a");
+  assert.equal(resolveWorkingDirectory("/tmp/Projects/app-b", base), "/tmp/Projects/app-b");
+  assert.throws(
+    () => resolveWorkingDirectory("/tmp/other/app-c", base),
+    /Path escapes working directory/,
+  );
+});
+
 test("validateBashCommand allows whitelisted commands", () => {
   const config = getDefaultSafetyConfig("/tmp/project");
   assert.doesNotThrow(() => validateBashCommand("npm test", config));

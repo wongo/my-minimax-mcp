@@ -4,6 +4,8 @@ import type { ModelId } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
 import { ConversationStore } from "../conversation/store.js";
 import { CostTracker } from "../utils/cost-tracker.js";
+import { Telemetry } from "../utils/telemetry.js";
+import { classifyError } from "../utils/error-classifier.js";
 import { withRetry } from "../utils/retry.js";
 
 export const chatSchema = z.object({
@@ -20,6 +22,7 @@ export async function chat(
   conversationStore: ConversationStore,
   costTracker: CostTracker,
   input: ChatInput,
+  telemetry?: Telemetry,
 ): Promise<string> {
   const model = input.model ?? client.getDefaultModel();
 
@@ -33,8 +36,23 @@ export async function chat(
   conversationStore.append(conversationId, "user", input.message);
   const messages = conversationStore.getMessages(conversationId);
 
-  const response = await withRetry(() =>
-    client.chat(messages, { model }),
+  const response = await withRetry(
+    () => client.chat(messages, { model }),
+    {
+      onAttempt: telemetry
+        ? async ({ attempt, succeeded, error }) => {
+            if (!succeeded) {
+              await telemetry.recordRetry({
+                tool: "minimax_chat",
+                attempt,
+                succeeded,
+                errorCategory: error !== undefined ? classifyError(error) : undefined,
+                errorMessage: error instanceof Error ? error.message.slice(0, 200) : undefined,
+              });
+            }
+          }
+        : undefined,
+    },
   );
 
   const reply = response.content ?? "";

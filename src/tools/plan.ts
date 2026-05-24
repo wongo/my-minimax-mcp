@@ -3,6 +3,8 @@ import { MiniMaxClient } from "../client/minimax-client.js";
 import type { ModelId } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
 import { CostTracker } from "../utils/cost-tracker.js";
+import { Telemetry } from "../utils/telemetry.js";
+import { classifyError } from "../utils/error-classifier.js";
 import { withRetry } from "../utils/retry.js";
 
 export const planSchema = z.object({
@@ -17,6 +19,7 @@ export async function plan(
   client: MiniMaxClient,
   costTracker: CostTracker,
   input: PlanInput,
+  telemetry?: Telemetry,
 ): Promise<string> {
   const model = input.model ?? client.getDefaultModel();
 
@@ -41,14 +44,30 @@ Return a JSON object with this exact structure:
     ? `Codebase context:\n${input.codebaseContext}\n\nTask: ${input.task}`
     : input.task;
 
-  const response = await withRetry(() =>
-    client.chat(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      { model, responseFormat: { type: "json_object" } },
-    ),
+  const response = await withRetry(
+    () =>
+      client.chat(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        { model, responseFormat: { type: "json_object" } },
+      ),
+    {
+      onAttempt: telemetry
+        ? async ({ attempt, succeeded, error }) => {
+            if (!succeeded) {
+              await telemetry.recordRetry({
+                tool: "minimax_plan",
+                attempt,
+                succeeded,
+                errorCategory: error !== undefined ? classifyError(error) : undefined,
+                errorMessage: error instanceof Error ? error.message.slice(0, 200) : undefined,
+              });
+            }
+          }
+        : undefined,
+    },
   );
 
   await costTracker.record("plan", model, response.usage);

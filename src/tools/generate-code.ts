@@ -4,6 +4,8 @@ import type { ModelId } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
 import { safeWriteFile } from "../utils/file-writer.js";
 import { CostTracker } from "../utils/cost-tracker.js";
+import { Telemetry } from "../utils/telemetry.js";
+import { classifyError } from "../utils/error-classifier.js";
 import { withRetry } from "../utils/retry.js";
 
 export const generateCodeSchema = z.object({
@@ -21,6 +23,7 @@ export async function generateCode(
   costTracker: CostTracker,
   workingDirectory: string,
   input: GenerateCodeInput,
+  telemetry?: Telemetry,
 ): Promise<string> {
   const model = input.model ?? client.getDefaultModel();
 
@@ -30,14 +33,30 @@ export async function generateCode(
     ? `Context:\n${input.context}\n\nTask: ${input.task}`
     : input.task;
 
-  const response = await withRetry(() =>
-    client.chat(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      { model },
-    ),
+  const response = await withRetry(
+    () =>
+      client.chat(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        { model },
+      ),
+    {
+      onAttempt: telemetry
+        ? async ({ attempt, succeeded, error }) => {
+            if (!succeeded) {
+              await telemetry.recordRetry({
+                tool: "minimax_generate_code",
+                attempt,
+                succeeded,
+                errorCategory: error !== undefined ? classifyError(error) : undefined,
+                errorMessage: error instanceof Error ? error.message.slice(0, 200) : undefined,
+              });
+            }
+          }
+        : undefined,
+    },
   );
 
   const code = response.content ?? "";

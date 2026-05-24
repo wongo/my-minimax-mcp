@@ -85,7 +85,7 @@ export function createServer(
     async (input) => {
       const start = Date.now();
       try {
-        const result = await generateCode(client, costTracker, workingDirectory, input);
+        const result = await generateCode(client, costTracker, workingDirectory, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_generate_code",
           durationMs: Date.now() - start,
@@ -219,7 +219,7 @@ export function createServer(
     async (input) => {
       const start = Date.now();
       try {
-        const result = await chat(client, conversationStore, costTracker, input);
+        const result = await chat(client, conversationStore, costTracker, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_chat",
           durationMs: Date.now() - start,
@@ -251,7 +251,7 @@ export function createServer(
     async (input) => {
       const start = Date.now();
       try {
-        const result = await plan(client, costTracker, input);
+        const result = await plan(client, costTracker, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_plan",
           durationMs: Date.now() - start,
@@ -309,7 +309,7 @@ export function createServer(
     async (input) => {
       const start = Date.now();
       try {
-        const result = await webSearch(codingPlanClient, costTracker, input);
+        const result = await webSearch(codingPlanClient, costTracker, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_web_search",
           durationMs: Date.now() - start,
@@ -338,7 +338,7 @@ export function createServer(
     async (input) => {
       const start = Date.now();
       try {
-        const result = await understandImage(codingPlanClient, costTracker, input);
+        const result = await understandImage(codingPlanClient, costTracker, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_understand_image",
           durationMs: Date.now() - start,
