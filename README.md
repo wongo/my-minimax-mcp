@@ -406,6 +406,23 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.5.0 (2026-05-24)
+
+**Observability improvements**
+- `analyze-failures.mjs` re-classifies stored records at read time using current rules — historical logs update automatically when classifier patterns improve
+- New **Section 8 "Re-classification Deltas"** in digest output shows how many records were corrected vs. stored category
+- `network_timeout` pattern extended to match `"Request timed out."` and `"read timeout"` variants (previously fell through to `unknown`)
+- Retry telemetry now actually fires — all 5 tools (`web-search`, `chat`, `generate-code`, `understand-image`, `plan`) pass `onAttempt` to `withRetry()` and log failed attempts via `telemetry.recordRetry()`; `retries-YYYY-MM.jsonl` will now have data
+
+**`iteration_limit` diagnostics**
+- `AgentTaskResult` now includes `diagnostics` when `reason === "iteration_limit"`: last 3 actions, unique files modified, `stillProgressing` heuristic, and a human-readable suggestion ("Retry with maxIterations=N" vs "decompose the task")
+- `filesChanged` in iteration_limit returns is now populated from tracked writes instead of always being `[]`
+- `mcp-server.ts` warns to stderr when caller sets `maxIterations < 10`
+- Iteration_limit failure log entries now include diagnostics payload for future analysis
+
+**Tests**
+- 161 tests (up from 152): 8 new `agent-loop` tests for diagnostic helpers, 1 safety regression test for cross-project `resolveWorkingDirectory`
+
 ### v1.4.0 (2026-05-17)
 
 **Failure Logging & Telemetry**
