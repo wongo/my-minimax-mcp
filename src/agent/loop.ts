@@ -31,6 +31,12 @@ export interface AgentTaskResult {
   tokensUsed: TokenUsage;
   cost: number;
   reason?: "iteration_limit" | "timeout" | "task_complete" | "task_failed" | "no_tool_calls";
+  diagnostics?: {
+    lastActions: string[];
+    filesModified: string[];
+    stillProgressing: boolean;
+    suggestion: string;
+  };
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert software engineer executing a coding task. You have access to tools for reading files, writing files, editing files, running shell commands, listing files, and searching code.
@@ -77,6 +83,26 @@ function describeToolCall(name: string, argsJson: string): string {
   }
 }
 
+export function buildIterationLimitDiagnostics(
+  lastActions: string[],
+  filesModified: string[],
+  maxIterations: number,
+): NonNullable<AgentTaskResult["diagnostics"]> {
+  const stillProgressing = lastActions.some(
+    a => a.startsWith("write_file") || a.startsWith("edit_file") || a.startsWith("edit_file_batch"),
+  );
+  const suggested = Math.ceil(maxIterations * 1.5);
+  const suggestion = stillProgressing
+    ? `Retry with maxIterations=${suggested} — agent was still modifying files in final iterations`
+    : `Agent was not modifying files in final iterations (likely stuck in info-gathering or thrashing). Consider decomposing the task into smaller agent_task calls instead of just raising maxIterations.`;
+  return {
+    lastActions,
+    filesModified,
+    stillProgressing,
+    suggestion,
+  };
+}
+
 export async function runAgentLoop(
   client: MiniMaxClient,
   options: AgentTaskOptions,
@@ -90,6 +116,8 @@ export async function runAgentLoop(
   const model = options.model ?? client.getDefaultModel();
   const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
   let iterations = 0;
+  const filesModified = new Set<string>();
+  const recentActions: string[] = [];
 
   const messages: ChatMessage[] = [
     { role: "system", content: options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT },
@@ -136,11 +164,16 @@ export async function runAgentLoop(
       return {
         success: false,
         summary: `Token budget exceeded after ${iterations} iterations (${totalUsage.inputTokens} input tokens)`,
-        filesChanged: [],
+        filesChanged: Array.from(filesModified),
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
         reason: "iteration_limit",
+        diagnostics: buildIterationLimitDiagnostics(
+          [...recentActions],
+          Array.from(filesModified),
+          config.maxIterations,
+        ),
       };
     }
 
@@ -168,8 +201,8 @@ export async function runAgentLoop(
 
     // Execute each tool call
     for (const toolCall of response.toolCalls) {
+      const stepDesc = describeToolCall(toolCall.function.name, toolCall.function.arguments);
       if (options.onProgress) {
-        const stepDesc = describeToolCall(toolCall.function.name, toolCall.function.arguments);
         await options.onProgress({
           iteration: iterations,
           maxIterations: config.maxIterations,
@@ -182,6 +215,22 @@ export async function runAgentLoop(
       try {
         const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
         result = await executor.execute(toolCall.function.name, args);
+
+        // Track recent actions (last 3)
+        if (stepDesc) {
+          recentActions.push(stepDesc);
+          if (recentActions.length > 3) recentActions.shift();
+        }
+
+        // Track file modifications — all three tools take a single `path` arg
+        if (
+          toolCall.function.name === "write_file" ||
+          toolCall.function.name === "edit_file" ||
+          toolCall.function.name === "edit_file_batch"
+        ) {
+          const pathVal = (args as { path?: string }).path;
+          if (typeof pathVal === "string" && pathVal) filesModified.add(pathVal);
+        }
 
         // Check for task_complete / task_failed
         if (toolCall.function.name === "task_complete") {
@@ -223,10 +272,15 @@ export async function runAgentLoop(
   return {
     success: false,
     summary: `Reached maximum iterations (${config.maxIterations})`,
-    filesChanged: [],
+    filesChanged: Array.from(filesModified),
     iterations,
     tokensUsed: totalUsage,
     cost: calculateCost(totalUsage, model),
     reason: "iteration_limit",
+    diagnostics: buildIterationLimitDiagnostics(
+      [...recentActions],
+      Array.from(filesModified),
+      config.maxIterations,
+    ),
   };
 }

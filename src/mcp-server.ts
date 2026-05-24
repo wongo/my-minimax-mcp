@@ -120,6 +120,9 @@ export function createServer(
     },
     async (input, extra) => {
       const start = Date.now();
+      if (input.maxIterations !== undefined && input.maxIterations < 10) {
+        console.error(`[minimax_agent_task] Warning: maxIterations=${input.maxIterations} is below recommended floor of 10. Most non-trivial tasks need ≥15 iterations.`);
+      }
       let resolvedWorkingDir: string | undefined;
       try {
         resolvedWorkingDir = resolveWorkingDirectory(input.workingDirectory, workingDirectory);
@@ -149,7 +152,13 @@ export function createServer(
         );
 
         // Parse the agent result to check for soft failures (iteration_limit)
-        let parsedResult: { success?: boolean; reason?: string; iterations?: number; tokensUsed?: { inputTokens: number; outputTokens: number } } = {};
+        let parsedResult: { 
+          success?: boolean; 
+          reason?: string; 
+          iterations?: number; 
+          tokensUsed?: { inputTokens: number; outputTokens: number };
+          diagnostics?: unknown;
+        } = {};
         try {
           parsedResult = JSON.parse(resultJson) as typeof parsedResult;
         } catch {
@@ -174,7 +183,11 @@ export function createServer(
           await failureLogger.record({
             tool: "minimax_agent_task",
             error: new Error(`Reached maximum iterations`),
-            toolInput: { task: input.task, maxIterations: input.maxIterations },
+            toolInput: { 
+              task: input.task, 
+              maxIterations: input.maxIterations,
+              diagnostics: parsedResult.diagnostics,
+            },
             workingDirectory: resolvedWorkingDir,
             model,
           });
