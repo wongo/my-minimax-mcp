@@ -402,6 +402,19 @@ logs/                       # 執行時 JSONL（gitignored）
 
 ## 更新紀錄
 
+### v1.5.1（2026-06-03）
+
+**模型選擇**
+- `MiniMax-M3` 現在可在所有接受 `model` override 的工具中選擇（`agent_task`、`chat`、`generate_code`、`plan`、`understand_image`）。既有的 M2.7 / M2.5 / *-highspeed 變體不變，預設仍為 M2.7。
+- `MODEL_PRICING` 新增 M3 項目，PAYG 標準價 $0.60 / $2.40 per 1M tokens（2026-06-07 前享有 50% 開幕折扣 $0.30 / $1.20）。
+
+**`understand_image` 支援 per-call model 覆寫**
+- `minimax_understand_image` MCP 工具新增 optional `model` 參數（與其他工具相同的 enum），呼叫端可選擇 M3 進行原生多模態分析，無需繼承 client 預設。
+- `CodingPlanClient` constructor 接受 `defaultModel` 參數並暴露 `getDefaultModel()`；`mcp-server.ts` 將 `MINIMAX_DEFAULT_MODEL` 串接進去。先前此 env 變數對影像呼叫無效（潛在 bug，本次修復）。
+
+**測試**
+- 測試數 161 → 162（`tool-default-models.test.ts` 新增 1 個 `understand_image` 的 default + override model 選擇測試）。
+
 ### v1.5.0（2026-05-24）
 
 **可觀測性改善**

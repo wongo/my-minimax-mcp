@@ -406,6 +406,19 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.5.1 (2026-06-03)
+
+**Model selection**
+- `MiniMax-M3` is now a selectable model on every tool that accepts a `model` override (`agent_task`, `chat`, `generate_code`, `plan`, `understand_image`). Predefined M2.7 / M2.5 / *-highspeed variants unchanged. Default remains M2.7.
+- `MODEL_PRICING` adds an M3 entry at the standard PAYG rate of $0.60 / $2.40 per 1M tokens (introductory 50% discount of $0.30 / $1.20 runs through 2026-06-07).
+
+**`understand_image` per-call model override**
+- The `minimax_understand_image` MCP tool now accepts an optional `model` parameter (same enum as the other tools), so callers can choose M3 for native multimodal analysis instead of inheriting the client default.
+- `CodingPlanClient` constructor now takes a `defaultModel` argument and exposes `getDefaultModel()`; `mcp-server.ts` threads `MINIMAX_DEFAULT_MODEL` into it. Previously the env var had no effect on image calls (latent bug, now fixed).
+
+**Tests**
+- 162 tests (up from 161): 1 new test in `tool-default-models.test.ts` covering default + override model selection for `understand_image`.
+
 ### v1.5.0 (2026-05-24)
 
 **Observability improvements**

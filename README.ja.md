@@ -406,6 +406,19 @@ logs/                       # 実行時 JSONL ファイル（gitignore 設定済
 
 ## 更新履歴
 
+### v1.5.1（2026-06-03）
+
+**モデル選択**
+- `MiniMax-M3` が、`model` オーバーライドを受け付けるすべてのツール（`agent_task`・`chat`・`generate_code`・`plan`・`understand_image`）で選択可能になりました。既存の M2.7 / M2.5 / *-highspeed バリエーションはそのまま。デフォルトは引き続き M2.7。
+- `MODEL_PRICING` に M3 エントリを追加（PAYG 標準価格 $0.60 / $2.40 per 1M tokens、2026-06-07 までの導入期間 50% オフで $0.30 / $1.20）。
+
+**`understand_image` の per-call モデル指定**
+- `minimax_understand_image` MCP ツールが他のツールと同じ enum の optional `model` パラメータを受け付けるようになりました。クライアント既定の代わりに M3 のネイティブマルチモーダル解析を選択できます。
+- `CodingPlanClient` のコンストラクタが `defaultModel` 引数を受け取り、`getDefaultModel()` を公開するように。`mcp-server.ts` は `MINIMAX_DEFAULT_MODEL` をそこへ伝搬します。これまで画像呼び出しでは env 変数が効かない潜在バグがあり、本リリースで修正しました。
+
+**テスト**
+- テスト数 161 → 162（`tool-default-models.test.ts` に `understand_image` のデフォルト＋オーバーライドモデル選択テストを 1 件追加）。
+
 ### v1.5.0（2026-05-24）
 
 **オブザーバビリティ改善**
