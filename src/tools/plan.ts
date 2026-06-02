@@ -10,7 +10,7 @@ import { withRetry } from "../utils/retry.js";
 export const planSchema = z.object({
   task: z.string().describe("Description of the task to plan"),
   codebaseContext: z.string().optional().describe("Context about the current codebase structure and relevant files"),
-  model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.7)"),
+  model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.7)"),
 });
 
 export type PlanInput = z.infer<typeof planSchema>;

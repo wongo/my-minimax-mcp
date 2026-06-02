@@ -7,7 +7,7 @@ import { runAgentLoop, type OnProgressCallback } from "../agent/loop.js";
 export const agentTaskSchema = z.object({
   task: z.string().describe("Full description of the task for the agent to complete autonomously"),
   workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
-  model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
+  model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
   maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
   systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
 });

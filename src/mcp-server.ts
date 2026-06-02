@@ -79,7 +79,7 @@ export function createServer(
       task: z.string().describe("Description of the code to generate"),
       language: z.string().describe("Programming language (e.g., typescript, python, go)"),
       filePath: z.string().optional().describe("If provided, write generated code to this file path"),
-      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       context: z.string().optional().describe("Additional context about the codebase or requirements"),
     },
     async (input) => {
@@ -113,7 +113,7 @@ export function createServer(
       inputSchema: {
         task: z.string().describe("Full description of the task for the agent to complete"),
         workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
-        model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+        model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
         maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
         systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
       },
@@ -213,7 +213,7 @@ export function createServer(
     {
       message: z.string().describe("Message to send to MiniMax"),
       conversationId: z.string().optional().describe("ID of existing conversation to continue"),
-      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       systemPrompt: z.string().optional().describe("System prompt (only for new conversations)"),
     },
     async (input) => {
@@ -246,7 +246,7 @@ export function createServer(
     {
       task: z.string().describe("Description of the task to plan"),
       codebaseContext: z.string().optional().describe("Context about the codebase"),
-      model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
     },
     async (input) => {
       const start = Date.now();

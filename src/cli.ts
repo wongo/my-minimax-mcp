@@ -113,7 +113,7 @@ Usage:
 Options:
   --task, -t       Task description (required for generate/chat/agent)
   --mode           Mode: generate | chat | agent (default: generate)
-  --model, -m      Model: MiniMax-M2.5 | MiniMax-M2.7 (default: MiniMax-M2.7)
+  --model, -m      Model: MiniMax-M2.5 | MiniMax-M2.7 | MiniMax-M3 (default: MiniMax-M2.7)
   --language, -l   Language for code generation (default: typescript)
   --dir, -d        Working directory for agent mode (default: cwd)
   --init           Set up Self-Improvement Loop (CLAUDE.md template + usage log)

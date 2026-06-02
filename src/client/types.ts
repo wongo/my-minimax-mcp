@@ -1,4 +1,4 @@
-export type ModelId = "MiniMax-M2.7" | "MiniMax-M2.5" | "MiniMax-M2.5-highspeed" | "MiniMax-M2.7-highspeed";
+export type ModelId = "MiniMax-M3" | "MiniMax-M2.7" | "MiniMax-M2.5" | "MiniMax-M2.5-highspeed" | "MiniMax-M2.7-highspeed";
 
 export interface TokenUsage {
   inputTokens: number;
@@ -52,6 +52,8 @@ export interface ChatResponse {
 
 // Cost per 1M tokens in USD
 export const MODEL_PRICING: Record<ModelId, { input: number; output: number }> = {
+  "MiniMax-M3": { input: 0.60, output: 2.40 }, // intro 50% off ($0.30/$1.20) through 2026-06-07
+
   "MiniMax-M2.7": { input: 0.30, output: 1.20 },
   "MiniMax-M2.5": { input: 0.118, output: 0.99 },
   "MiniMax-M2.5-highspeed": { input: 0.118, output: 0.99 },

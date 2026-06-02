@@ -11,7 +11,7 @@ import { withRetry } from "../utils/retry.js";
 export const chatSchema = z.object({
   message: z.string().describe("Message to send to MiniMax"),
   conversationId: z.string().optional().describe("ID of existing conversation to continue (omit to start new)"),
-  model: z.enum(["MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.7)"),
+  model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.7)"),
   systemPrompt: z.string().optional().describe("System prompt (only used when starting a new conversation)"),
 });
 
