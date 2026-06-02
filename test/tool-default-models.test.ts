@@ -7,10 +7,12 @@ import { generateCode } from "../src/tools/generate-code.ts";
 import { chat } from "../src/tools/chat.ts";
 import { plan } from "../src/tools/plan.ts";
 import { agentTask } from "../src/tools/agent-task.ts";
+import { understandImage } from "../src/tools/understand-image.ts";
 import { CostTracker } from "../src/utils/cost-tracker.ts";
 import { ConversationStore } from "../src/conversation/store.ts";
 import type { ChatResponse, ChatWithToolsOptions, ChatOptions, ChatMessage, ModelId } from "../src/client/types.ts";
 import type { MiniMaxClient } from "../src/client/minimax-client.ts";
+import type { CodingPlanClient } from "../src/client/coding-plan-client.ts";
 
 const DEFAULT_MODEL: ModelId = "MiniMax-M2.7-highspeed";
 
@@ -105,4 +107,33 @@ test("agentTask inherits the MiniMaxClient default model and explicit overrides 
   assert.deepEqual(seenModels, [DEFAULT_MODEL, "MiniMax-M2.5"]);
   assert.equal(defaultTracker.getReport().breakdown[0].model, DEFAULT_MODEL);
   assert.equal(overrideTracker.getReport().breakdown[0].model, "MiniMax-M2.5");
+});
+
+test("understandImage inherits the CodingPlanClient default model and explicit overrides still win", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-image-model-"));
+  const logPath = join(workingDirectory, "costs.log");
+  const seenModels: ModelId[] = [];
+
+  const codingClient = {
+    getDefaultModel: () => DEFAULT_MODEL,
+    understandImage: async (_prompt: string, _imageDataUrl: string, model?: ModelId) => {
+      seenModels.push(model ?? DEFAULT_MODEL);
+      return { content: "ok" };
+    },
+  } as unknown as CodingPlanClient;
+
+  const defaultTracker = new CostTracker(logPath);
+  await understandImage(codingClient, defaultTracker, {
+    prompt: "describe this image",
+    imageSource: "data:image/png;base64,iVBORw0KGgo=",
+  });
+
+  const overrideTracker = new CostTracker(logPath);
+  await understandImage(codingClient, overrideTracker, {
+    prompt: "describe this image",
+    imageSource: "data:image/png;base64,iVBORw0KGgo=",
+    model: "MiniMax-M2.5",
+  });
+
+  assert.deepEqual(seenModels, [DEFAULT_MODEL, "MiniMax-M2.5"]);
 });

@@ -1,4 +1,5 @@
 import { CodingPlanClient } from "../client/coding-plan-client.js";
+import type { ModelId } from "../client/types.js";
 import { CostTracker } from "../utils/cost-tracker.js";
 import { Telemetry } from "../utils/telemetry.js";
 import { classifyError } from "../utils/error-classifier.js";
@@ -8,11 +9,12 @@ import { withRetry } from "../utils/retry.js";
 export async function understandImage(
   client: CodingPlanClient,
   costTracker: CostTracker,
-  input: { prompt: string; imageSource: string },
+  input: { prompt: string; imageSource: string; model?: ModelId },
   telemetry?: Telemetry,
 ): Promise<string> {
+  const model = input.model ?? client.getDefaultModel();
   const dataUrl = await toBase64DataUrl(input.imageSource);
-  const result = await withRetry(() => client.understandImage(input.prompt, dataUrl), {
+  const result = await withRetry(() => client.understandImage(input.prompt, dataUrl, model), {
     onAttempt: telemetry
       ? async ({ attempt, succeeded, error }) => {
           if (!succeeded) {

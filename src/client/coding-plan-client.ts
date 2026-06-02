@@ -1,3 +1,5 @@
+import type { ModelId } from "./types.js";
+
 export interface WebSearchResult {
   title: string;
   link: string;
@@ -24,10 +26,12 @@ interface BaseResponse {
 export class CodingPlanClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly defaultModel: ModelId;
 
-  constructor(apiKey: string, baseUrl: string = "https://api.minimax.io") {
+  constructor(apiKey: string, baseUrl: string = "https://api.minimax.io", defaultModel: ModelId = "MiniMax-M2.7") {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
+    this.defaultModel = defaultModel;
   }
 
   private async request<T>(path: string, body: unknown): Promise<T> {
@@ -61,10 +65,18 @@ export class CodingPlanClient {
     return this.request<WebSearchResponse>("/v1/coding_plan/search", { q: query });
   }
 
-  async understandImage(prompt: string, imageDataUrl: string): Promise<ImageUnderstandResponse> {
-    return this.request<ImageUnderstandResponse>("/v1/coding_plan/vlm", {
+  async understandImage(prompt: string, imageDataUrl: string, model?: ModelId): Promise<ImageUnderstandResponse> {
+    const body: { prompt: string; image_url: string; model?: ModelId } = {
       prompt,
       image_url: imageDataUrl,
-    });
+    };
+    if (model !== undefined) {
+      body.model = model;
+    }
+    return this.request<ImageUnderstandResponse>("/v1/coding_plan/vlm", body);
+  }
+
+  getDefaultModel(): ModelId {
+    return this.defaultModel;
   }
 }

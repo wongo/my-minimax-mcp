@@ -57,7 +57,7 @@ export function createServer(
   const workingDirectory = env.MINIMAX_WORKING_DIR || process.cwd();
 
   const client = new MiniMaxClient(apiKey, defaultModel);
-  const codingPlanClient = new CodingPlanClient(apiKey, env.MINIMAX_API_HOST);
+  const codingPlanClient = new CodingPlanClient(apiKey, env.MINIMAX_API_HOST, defaultModel);
   const conversationStore = new ConversationStore();
   const costTracker = externalCostTracker ?? new CostTracker(costLogPath);
 
@@ -334,6 +334,7 @@ export function createServer(
     {
       prompt: z.string().describe("Question or instruction about the image"),
       imageSource: z.string().describe("Image URL (HTTP/HTTPS), local file path, or base64 data URL"),
+      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
     },
     async (input) => {
       const start = Date.now();
