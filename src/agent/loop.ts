@@ -142,7 +142,9 @@ export async function runAgentLoop(
     const response = await client.chatWithTools(messages, {
       model,
       tools: AGENT_FUNCTIONS,
-      maxTokens: 16384,
+      // M3 caps at 8192 (error 2013 otherwise). The client has the same
+      // default; lower here to avoid the agent path overriding it.
+      maxTokens: 8192,
     });
 
     totalUsage.inputTokens += response.usage.inputTokens;
