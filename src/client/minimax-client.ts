@@ -2,7 +2,10 @@ import OpenAI from "openai";
 import type { ChatMessage, ChatOptions, ChatResponse, ChatWithToolsOptions, ModelId, TokenUsage } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://api.minimax.io/v1";
-const DEFAULT_MAX_TOKENS = 65536;
+// M3 max output is 8192, M2.7 supports more. 65536 was rejected by M3
+// with error 2013 ("invalid params"). Use a conservatively high default
+// that works across all models; callers can pass maxTokens to override.
+const DEFAULT_MAX_TOKENS = 8192;
 
 /** Strip MiniMax's <think>...</think> reasoning tags from response content */
 function stripThinkTags(content: string | null): string | null {
