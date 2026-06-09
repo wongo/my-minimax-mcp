@@ -129,6 +129,7 @@ function periodRange() {
 function modelBucket(model) {
   if (!model) return 'other';
   const m = model.toLowerCase();
+  if (m.includes('minimax')) return null; // separately billed, exclude from Claude buckets
   if (m.includes('opus')) return 'opus';
   if (m.includes('sonnet')) return 'sonnet';
   if (m.includes('haiku')) return 'haiku';
@@ -237,6 +238,7 @@ function processClaude(rawEntries) {
     const dateKey = toDateKey(date);
     const weekKey = isoWeekKey(date);
     const bucket = modelBucket(entry.message?.model);
+    if (bucket === null) continue; // MiniMax tokens — separately billed, skip
     const cwd = entry.cwd ?? null;
 
     const inputTokens = usage.input_tokens ?? 0;
