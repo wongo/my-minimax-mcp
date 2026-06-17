@@ -18,10 +18,24 @@ export class CostTracker {
   private entries: CostEntry[] = [];
   private readonly logPath: string;
   readonly sessionId: string;
+  private projectCounts: Map<string, number> = new Map();
 
   constructor(logPath?: string, sessionId?: string) {
     this.logPath = logPath ?? resolve(homedir(), ".claude", "minimax-costs.log");
     this.sessionId = sessionId ?? new Date().toISOString();
+  }
+
+  notifyProject(path: string): void {
+    this.projectCounts.set(path, (this.projectCounts.get(path) ?? 0) + 1);
+  }
+
+  getTopProject(): string | null {
+    let top: string | null = null;
+    let max = 0;
+    for (const [path, count] of this.projectCounts) {
+      if (count > max) { max = count; top = path; }
+    }
+    return top;
   }
 
   async record(tool: string, model: ModelId, usage: TokenUsage): Promise<void> {

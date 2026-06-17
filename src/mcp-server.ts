@@ -88,6 +88,7 @@ export function createServer(
       const effectiveWorkingDir = input.workingDirectory
         ? resolveWorkingDirectory(input.workingDirectory, workingDirectory)
         : workingDirectory;
+      costTracker.notifyProject(effectiveWorkingDir);
       try {
         const result = await generateCode(client, costTracker, effectiveWorkingDir, input, telemetry);
         await telemetry.recordSuccess({
@@ -130,6 +131,7 @@ export function createServer(
       let resolvedWorkingDir: string | undefined;
       try {
         resolvedWorkingDir = resolveWorkingDirectory(input.workingDirectory, workingDirectory);
+        costTracker.notifyProject(resolvedWorkingDir);
         const progressToken = extra._meta?.progressToken;
         const onProgress = progressToken !== undefined
           ? async (info: { iteration: number; maxIterations: number; lastAction: string; message: string }) => {
@@ -467,7 +469,7 @@ async function main() {
       };
       await originalEnd(
         report.callCount, report.totalCost, "auto-persisted on shutdown",
-        costTracker.sessionId, projectDir, savingsData,
+        costTracker.sessionId, costTracker.getTopProject() ?? projectDir, savingsData,
       );
     }
   };
