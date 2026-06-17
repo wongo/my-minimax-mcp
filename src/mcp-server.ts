@@ -401,7 +401,7 @@ export function createServer(
             };
             const result = await sessionTracker.end(
               report.callCount, report.totalCost, input.notes,
-              costTracker.sessionId, projectDir, savingsData,
+              costTracker.sessionId, costTracker.getTopProject() ?? projectDir, savingsData,
             );
             await telemetry.recordSuccess({
               tool: "minimax_session_tracker",
