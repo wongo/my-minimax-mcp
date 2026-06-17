@@ -11,7 +11,7 @@ import { withRetry } from "../utils/retry.js";
 export const generateCodeSchema = z.object({
   task: z.string().describe("Description of the code to generate"),
   language: z.string().describe("Programming language (e.g., typescript, python, go)"),
-  filePath: z.string().optional().describe("Path relative to workingDirectory. Absolute paths are rejected. Example: 'src/utils/foo.ts'"),
+  filePath: z.string().optional().describe("Path relative to workingDirectory. Absolute paths are rejected. Example: 'src/utils/foo.ts' or 'content/article.md'"),
   model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
   context: z.string().optional().describe("Additional context about the codebase or requirements"),
 });

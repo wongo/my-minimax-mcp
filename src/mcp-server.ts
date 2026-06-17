@@ -79,18 +79,22 @@ export function createServer(
       task: z.string().describe("Description of the code to generate"),
       language: z.string().describe("Programming language (e.g., typescript, python, go)"),
       filePath: z.string().optional().describe("If provided, write generated code to this file path"),
+      workingDirectory: z.string().optional().describe("Absolute path to the project directory for file operations. Defaults to server base directory. Example: '/home/nickw/Projects/taiwan-in-japan-portal'"),
       model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       context: z.string().optional().describe("Additional context about the codebase or requirements"),
     },
     async (input) => {
       const start = Date.now();
+      const effectiveWorkingDir = input.workingDirectory
+        ? resolveWorkingDirectory(input.workingDirectory, workingDirectory)
+        : workingDirectory;
       try {
-        const result = await generateCode(client, costTracker, workingDirectory, input, telemetry);
+        const result = await generateCode(client, costTracker, effectiveWorkingDir, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_generate_code",
           durationMs: Date.now() - start,
           model: input.model ?? defaultModel,
-          callerProject: basename(workingDirectory),
+          callerProject: basename(effectiveWorkingDir),
         });
         return { content: [{ type: "text", text: result }] };
       } catch (err) {
@@ -98,7 +102,7 @@ export function createServer(
           tool: "minimax_generate_code",
           error: err,
           toolInput: input,
-          workingDirectory,
+          workingDirectory: effectiveWorkingDir,
           model: input.model ?? defaultModel,
         });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
