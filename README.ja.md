@@ -406,6 +406,12 @@ logs/                       # 実行時 JSONL ファイル（gitignore 設定済
 
 ## 更新履歴
 
+### v1.5.3（2026-06-17）
+
+**`session_tracker` — セッション終了時のプロジェクト帰属を修正**
+- auto-persist（SIGTERM/SIGINT）と手動 `minimax_session_tracker end` が常に MCP サーバーの base directory（`MINIMAX_WORKING_DIR`）を `project` として書き込み、使用量データが根ディレクトリに誤帰属されていた。`analyze-savings.mjs --project=` でフィルタすると 0 に見えるという問題。
+- 修正：`CostTracker` に `notifyProject()` 頻度カウンタを追加。`generate_code` と `agent_task` ハンドラが `workingDirectory` 解決後に呼び出し、auto-persist と手動 `end` の両パスで `getTopProject()` を使用。呼び出しがない場合のみ base dir にフォールバック。
+
 ### v1.5.2（2026-06-09）
 
 **`minimax_generate_code` — `workingDirectory` パラメータ追加**

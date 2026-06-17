@@ -402,6 +402,12 @@ logs/                       # 執行時 JSONL（gitignored）
 
 ## 更新紀錄
 
+### v1.5.3（2026-06-17）
+
+**`session_tracker` — 修正 session 結束時的專案歸屬**
+- auto-persist（SIGTERM/SIGINT）與手動 `minimax_session_tracker end` 都會將 `project` 寫成 MCP server 的 base directory（`MINIMAX_WORKING_DIR`），導致所有使用量被誤記到根目錄，`analyze-savings.mjs --project=` 過濾時看起來是 0。
+- 修正：`CostTracker` 新增 `notifyProject()` 頻率計數器；`generate_code` 與 `agent_task` handler 在解析 `workingDirectory` 後立即呼叫，auto-persist 與手動 `end` 皆改用 `getTopProject()` 取最多呼叫的專案，無紀錄時才 fallback 到 base dir。
+
 ### v1.5.2（2026-06-09）
 
 **`minimax_generate_code` — 新增 `workingDirectory` 參數**

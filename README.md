@@ -406,6 +406,14 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.5.3 (2026-06-17)
+
+**`session_tracker` — fix project attribution on shutdown and manual `end`**
+- `auto-persist on shutdown` (SIGTERM/SIGINT) always wrote `project: MINIMAX_WORKING_DIR` regardless of which project the Claude session was in, causing all usage data to be misattributed to the server base directory.
+- Manual `minimax_session_tracker end` had the same bug.
+- Fix: `CostTracker` now tracks a per-session project frequency counter via `notifyProject()`. Both the auto-persist and the manual `end` paths use `getTopProject()` to resolve the most-called project, falling back to the server base dir only when no `workingDirectory` was passed (e.g. sessions that only called `web_search` / `chat`).
+- `notifyProject()` is called from `generate_code` and `agent_task` handlers immediately after resolving `workingDirectory`.
+
 ### v1.5.2 (2026-06-09)
 
 **`minimax_generate_code` — `workingDirectory` parameter**
