@@ -406,6 +406,14 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.5.2 (2026-06-09)
+
+**`minimax_generate_code` — `workingDirectory` parameter**
+- Added optional `workingDirectory` parameter. Previously the tool always resolved `filePath` relative to the MCP server's base directory (`MINIMAX_WORKING_DIR`), causing files to land in the wrong location when called from project sub-directories (e.g. `taiwan-in-japan-portal`). Callers can now pass an absolute project path; falls back to the server base if omitted.
+
+**`analyze-savings.mjs` — fix MiniMax token double-count**
+- MiniMax sub-agent tokens (model names containing `minimax`) were being bucketed as "other" Claude tokens and priced at Sonnet rates, inflating the estimated Claude spend by ~$1,765 / month. Fixed: `modelBucket()` now returns `null` for MiniMax models and the aggregation loop skips `null` buckets entirely.
+
 ### v1.5.1 (2026-06-03)
 
 **Model selection**

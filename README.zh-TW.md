@@ -402,6 +402,14 @@ logs/                       # 執行時 JSONL（gitignored）
 
 ## 更新紀錄
 
+### v1.5.2（2026-06-09）
+
+**`minimax_generate_code` — 新增 `workingDirectory` 參數**
+- 新增 optional `workingDirectory` 參數。之前工具永遠相對 MCP server 的 base dir（`MINIMAX_WORKING_DIR`）寫檔，從專案子目錄呼叫時（如 `taiwan-in-japan-portal`）檔案會落到錯誤位置。呼叫者現在可傳入絕對專案路徑；未傳則 fallback 到 server base。
+
+**`analyze-savings.mjs` — 修復 MiniMax token 重複計算**
+- MiniMax sub-agent token（model 名稱含 `minimax`）被錯誤歸入「other」Claude 桶並以 Sonnet 定價計算，導致 Claude 花費高估約 $1,765/月。修法：`modelBucket()` 對 MiniMax model 回傳 `null`，彙總迴圈跳過 `null` 桶。
+
 ### v1.5.1（2026-06-03）
 
 **模型選擇**

@@ -406,6 +406,14 @@ logs/                       # 実行時 JSONL ファイル（gitignore 設定済
 
 ## 更新履歴
 
+### v1.5.2（2026-06-09）
+
+**`minimax_generate_code` — `workingDirectory` パラメータ追加**
+- オプションの `workingDirectory` パラメータを追加。以前はMCPサーバーのベースディレクトリ（`MINIMAX_WORKING_DIR`）を基準にファイルを書き込んでいたため、プロジェクトサブディレクトリから呼び出した場合（例：`taiwan-in-japan-portal`）にファイルが誤った場所に出力されていた。呼び出し元が絶対パスを渡せるようになり、省略時はサーバーベースにフォールバック。
+
+**`analyze-savings.mjs` — MiniMaxトークン二重計上の修正**
+- MiniMaxサブエージェントのトークン（モデル名に `minimax` を含む）が「other」Claudeバケットに誤分類され、Sonnet料金で計算されていた結果、Claude利用料の見積もりが月約$1,765過大計上されていた。修正：`modelBucket()` がMiniMaxモデルに対して `null` を返し、集計ループで `null` バケットをスキップするよう変更。
+
 ### v1.5.1（2026-06-03）
 
 **モデル選択**
