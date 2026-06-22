@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MiniMaxClient } from "../client/minimax-client.js";
+import { CodingPlanClient } from "../client/coding-plan-client.js";
 import type { ModelId } from "../client/types.js";
 import { CostTracker } from "../utils/cost-tracker.js";
 import { runAgentLoop, type OnProgressCallback } from "../agent/loop.js";
@@ -17,10 +18,17 @@ export type AgentTaskInput = z.infer<typeof agentTaskSchema>;
 export async function agentTask(
   client: MiniMaxClient,
   costTracker: CostTracker,
+  codingPlanClient: CodingPlanClient,
   input: AgentTaskInput,
   onProgress?: OnProgressCallback,
 ): Promise<string> {
   const model = input.model ?? client.getDefaultModel();
+
+  const webSearch = async (query: string): Promise<string> => {
+    const result = await codingPlanClient.webSearch(query);
+    await costTracker.recordUnmetered("web_search");
+    return JSON.stringify(result);
+  };
 
   const result = await runAgentLoop(client, {
     task: input.task,
@@ -28,6 +36,7 @@ export async function agentTask(
     model,
     maxIterations: input.maxIterations,
     systemPrompt: input.systemPrompt,
+    webSearch,
     onProgress,
   });
 

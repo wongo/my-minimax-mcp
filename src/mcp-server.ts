@@ -150,6 +150,7 @@ export function createServer(
         const resultJson = await agentTask(
           client,
           costTracker,
+          codingPlanClient,
           {
             ...input,
             workingDirectory: resolvedWorkingDir,

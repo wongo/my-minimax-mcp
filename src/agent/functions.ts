@@ -97,6 +97,17 @@ export const AGENT_FUNCTIONS: FunctionDefinition[] = [
     },
   },
   {
+    name: "web_search",
+    description: "Search the web for up-to-date information (docs, fact-checking, verifying data, library usage). Returns organic results: title, link, snippet, date. You have a limited budget of searches per task — use them for information you cannot find in the local codebase.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "task_complete",
     description: "Signal that the task is complete. Call this when you have finished the assigned task successfully.",
     parameters: {

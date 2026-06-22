@@ -5,6 +5,162 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FunctionExecutor } from "../src/agent/executor.ts";
 import { getDefaultSafetyConfig } from "../src/agent/safety.ts";
+import { AGENT_FUNCTIONS } from "../src/agent/functions.ts";
+
+// ── web_search tool in AGENT_FUNCTIONS ────────────────────────────────────────
+
+test("AGENT_FUNCTIONS includes web_search", () => {
+  const names = AGENT_FUNCTIONS.map((f) => f.name);
+  assert.ok(names.includes("web_search"), `Expected web_search in ${names.join(", ")}`);
+});
+
+const webSearchFn = AGENT_FUNCTIONS.find((f) => f.name === "web_search");
+assert.ok(webSearchFn, "web_search function definition should exist");
+
+test("web_search function has correct schema", () => {
+  assert.equal(webSearchFn!.parameters.type, "object");
+  assert.deepEqual(webSearchFn!.parameters.required, ["query"]);
+  assert.equal(webSearchFn!.parameters.properties.query.type, "string");
+  assert.equal(
+    webSearchFn!.description.includes("limited budget"),
+    true,
+    "web_search description should mention limited budget",
+  );
+});
+
+// ── web_search via FunctionExecutor ───────────────────────────────────────────
+
+test("execute(web_search) returns closure result when webSearch is injected", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "websearch-exec-"));
+  const config = getDefaultSafetyConfig(workingDirectory);
+
+  const mockResult = JSON.stringify({ results: [{ title: "Test", url: "https://example.com" }] });
+  const mockWebSearch = async (query: string) => {
+    assert.equal(query, "typescript latest version");
+    return mockResult;
+  };
+
+  const executor = new FunctionExecutor(config, mockWebSearch);
+  const result = await executor.execute("web_search", { query: "typescript latest version" });
+
+  assert.equal(result, mockResult);
+});
+
+test("search counter increments on each successful web_search call", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "websearch-counter-"));
+  const config = getDefaultSafetyConfig(workingDirectory);
+  config.maxWebSearches = 3;
+
+  let callCount = 0;
+  const mockWebSearch = async (_query: string) => {
+    callCount++;
+    return JSON.stringify({ results: [] });
+  };
+
+  const executor = new FunctionExecutor(config, mockWebSearch);
+
+  await executor.execute("web_search", { query: "q1" });
+  await executor.execute("web_search", { query: "q2" });
+  await executor.execute("web_search", { query: "q3" });
+
+  assert.equal(callCount, 3, `Expected 3 calls, got ${callCount}`);
+});
+
+test("after maxWebSearches calls, further calls return budget exhausted message and do NOT invoke closure", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "websearch-budget-"));
+  const config = getDefaultSafetyConfig(workingDirectory);
+  config.maxWebSearches = 2;
+
+  let callCount = 0;
+  const mockWebSearch = async (_query: string) => {
+    callCount++;
+    return JSON.stringify({ results: [] });
+  };
+
+  const executor = new FunctionExecutor(config, mockWebSearch);
+
+  // Exhaust the budget
+  await executor.execute("web_search", { query: "q1" });
+  await executor.execute("web_search", { query: "q2" });
+  assert.equal(callCount, 2);
+
+  // One more — should return exhausted message, not invoke closure
+  const result = await executor.execute("web_search", { query: "q3" });
+
+  assert.equal(callCount, 2, "Closure should NOT be called again after budget exhausted");
+  assert.ok(
+    result.includes("budget exhausted"),
+    `Expected "budget exhausted" in result, got: ${result}`,
+  );
+  assert.ok(
+    result.includes("2/2"),
+    `Expected "2/2" in exhausted message, got: ${result}`,
+  );
+});
+
+test("execute(web_search) returns 'not available' message when no webSearch closure provided (backward compat)", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "websearch-noclosure-"));
+  const config = getDefaultSafetyConfig(workingDirectory);
+
+  // No second argument
+  const executor = new FunctionExecutor(config);
+  const result = await executor.execute("web_search", { query: "anything" });
+
+  assert.ok(
+    result.includes("not available"),
+    `Expected "not available" in result, got: ${result}`,
+  );
+});
+
+test("execute(web_search) decrements counter on failure (failed call does not count against budget)", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "websearch-fail-"));
+  const config = getDefaultSafetyConfig(workingDirectory);
+  config.maxWebSearches = 1;
+
+  let callCount = 0;
+  let shouldFail = true;
+  const mockWebSearch = async (_query: string) => {
+    if (shouldFail) {
+      shouldFail = false;
+      throw new Error("network error");
+    }
+    callCount++;
+    return JSON.stringify({ results: [] });
+  };
+
+  const executor = new FunctionExecutor(config, mockWebSearch);
+
+  // First call fails — should not count against budget
+  await executor.execute("web_search", { query: "q1" });
+
+  // Second call succeeds — now exhaust budget normally
+  await executor.execute("web_search", { query: "q2" });
+  await executor.execute("web_search", { query: "q3" }); // budget exhausted
+
+  assert.equal(callCount, 1, `Expected 1 successful call after retry, got ${callCount}`);
+});
+
+test("execute(web_search) failure returns 'Web search failed' message with error details", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "websearch-err-"));
+  const config = getDefaultSafetyConfig(workingDirectory);
+  config.maxWebSearches = 5;
+
+  const mockWebSearch = async (_query: string) => {
+    throw new Error("rate limit exceeded");
+  };
+
+  const executor = new FunctionExecutor(config, mockWebSearch);
+  const result = await executor.execute("web_search", { query: "anything" });
+
+  assert.ok(
+    result.includes("Web search failed"),
+    `Expected "Web search failed" in result, got: ${result}`,
+  );
+  assert.ok(
+    result.includes("rate limit exceeded"),
+    `Expected "rate limit exceeded" in result, got: ${result}`,
+  );
+});
 
 test("FunctionExecutor list_files respects glob semantics for nested paths", async () => {
   const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-"));

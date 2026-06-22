@@ -40,6 +40,7 @@ const BASH_BLOCKLIST: RegExp[] = [
 export interface SafetyConfig {
   maxIterations: number;
   maxInputTokens: number;
+  maxWebSearches: number;
   timeoutMs: number;
   workingDirectory: string;
   additionalBashWhitelist: RegExp[];
@@ -48,10 +49,11 @@ export interface SafetyConfig {
 export function getDefaultSafetyConfig(workingDirectory: string): SafetyConfig {
   return {
     maxIterations: parseInt(process.env.MINIMAX_MAX_ITERATIONS ?? "25", 10),
-    maxInputTokens: 500_000,
+    maxInputTokens: parseInt(process.env.MINIMAX_MAX_INPUT_TOKENS ?? "500000", 10),
     timeoutMs: parseInt(process.env.MINIMAX_TIMEOUT_MS ?? "300000", 10),
     workingDirectory: resolve(workingDirectory),
     additionalBashWhitelist: parseAdditionalWhitelist(process.env.MINIMAX_BASH_WHITELIST),
+    maxWebSearches: parseInt(process.env.MINIMAX_MAX_WEB_SEARCHES ?? "10", 10),
   };
 }
 

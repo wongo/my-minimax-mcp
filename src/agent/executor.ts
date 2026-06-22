@@ -7,10 +7,16 @@ import { validateFilePath, validateBashCommand, type SafetyConfig } from "./safe
 const execFileAsync = promisify(execFile);
 
 export class FunctionExecutor {
-  constructor(private config: SafetyConfig) {}
+  private searchCount = 0;
+  constructor(
+    private config: SafetyConfig,
+    private webSearch?: (query: string) => Promise<string>,
+  ) {}
 
   async execute(functionName: string, args: Record<string, unknown>): Promise<string> {
     switch (functionName) {
+      case "web_search":
+        return this.webSearchTool(args.query as string);
       case "read_file":
         return this.readFile(args.path as string);
       case "write_file":
@@ -107,6 +113,22 @@ export class FunctionExecutor {
       .filter((file) => matcher.test(file));
 
     return matches.join("\n") || "No files found";
+  }
+
+  private async webSearchTool(query: string): Promise<string> {
+    if (!this.webSearch) {
+      return "Error: web search is not available in this session.";
+    }
+    if (this.searchCount >= this.config.maxWebSearches) {
+      return `Web search budget exhausted (${this.config.maxWebSearches}/${this.config.maxWebSearches}). Use information already gathered.`;
+    }
+    this.searchCount++;
+    try {
+      return await this.webSearch(query);
+    } catch (err) {
+      this.searchCount--; // don't count a failed call against budget
+      return `Web search failed: ${err instanceof Error ? err.message : String(err)}`;
+    }
   }
 
   private async searchContent(pattern: string, path?: string, fileGlob?: string): Promise<string> {

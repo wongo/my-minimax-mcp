@@ -20,6 +20,7 @@ export interface AgentTaskOptions {
   model?: ModelId;
   maxIterations?: number;
   systemPrompt?: string;
+  webSearch?: (query: string) => Promise<string>;
   onProgress?: OnProgressCallback;
 }
 
@@ -39,7 +40,7 @@ export interface AgentTaskResult {
   };
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are an expert software engineer executing a coding task. You have access to tools for reading files, writing files, editing files, running shell commands, listing files, and searching code.
+const DEFAULT_SYSTEM_PROMPT = `You are an expert software engineer executing a coding task. You have access to tools for reading files, writing files, editing files, running shell commands, listing files, searching code, and web search.
 
 Work autonomously to complete the assigned task:
 1. First understand the codebase by reading relevant files
@@ -54,7 +55,8 @@ If you cannot complete the task after reasonable attempts, call task_failed with
 Important:
 - Always test your changes before calling task_complete
 - Make minimal, focused changes
-- Do not modify files unrelated to the task`;
+- Do not modify files unrelated to the task
+- Use web_search when you need up-to-date external info (docs, fact-checks); it has a limited per-task budget`;
 
 function describeToolCall(name: string, argsJson: string): string {
   try {
@@ -71,6 +73,8 @@ function describeToolCall(name: string, argsJson: string): string {
         return `${name} → ${args.pattern ?? args.path ?? "."}`;
       case "search_content":
         return `${name} → ${args.pattern}`;
+      case "web_search":
+        return `${name} → ${args.query}`;
       case "task_complete":
         return "task_complete";
       case "task_failed":
@@ -112,7 +116,7 @@ export async function runAgentLoop(
     ...(options.maxIterations ? { maxIterations: options.maxIterations } : {}),
   };
 
-  const executor = new FunctionExecutor(config);
+  const executor = new FunctionExecutor(config, options.webSearch);
   const model = options.model ?? client.getDefaultModel();
   const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
   let iterations = 0;

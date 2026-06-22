@@ -90,14 +90,15 @@ test("agentTask inherits the MiniMaxClient default model and explicit overrides 
   } as unknown as MiniMaxClient;
 
   const defaultTracker = new CostTracker(logPath);
-  await agentTask(client, defaultTracker, {
+  const codingPlanClient = { webSearch: async () => ({}) } as unknown as CodingPlanClient;
+  await agentTask(client, defaultTracker, codingPlanClient, {
     task: "finish task",
     workingDirectory,
     maxIterations: 1,
   });
 
   const overrideTracker = new CostTracker(logPath);
-  await agentTask(client, overrideTracker, {
+  await agentTask(client, overrideTracker, codingPlanClient, {
     task: "finish task",
     workingDirectory,
     maxIterations: 1,
