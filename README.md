@@ -411,6 +411,20 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.5.4 (2026-06-22)
+
+**`minimax_agent_task` — web_search tool + maxInputTokens override**
+- Added `web_search` tool to agent loop, enabling autonomous web research during coding tasks. Agent can now search the web when it needs up-to-date external info (docs, fact-checks). Budget limited to `MINIMAX_MAX_WEB_SEARCHES` (default: 10 searches per task).
+- Added `maxInputTokens` configurable option via `MINIMAX_MAX_INPUT_TOKENS` env var (default: 500,000) and per-call `maxInputTokens` parameter override. Allows handling large tasks that exceed default token budget.
+- **Bug fix**: Corrected web search budget exhausted error message — was showing `(max/max)` instead of `(count/max)`, misleading users about actual search usage.
+- Updated documentation: README.md now documents `web_search` in agent loop tool list, plus `MINIMAX_MAX_INPUT_TOKENS` and `MINIMAX_MAX_WEB_SEARCHES` env vars.
+
+**Code review**: 1 bug fixed, 4 altitude issues logged as tech debt (non-blocking):
+- Reactive budget check (medium priority — saves tokens by checking before API call)
+- Tool registration boilerplate (low priority — reduce duplication)
+- Tool-wrapping closure pattern (low priority — 3 cases exist)
+- Web search diagnostics (low priority — improve UX)
+
 ### v1.5.3 (2026-06-17)
 
 **`session_tracker` — fix project attribution on shutdown and manual `end`**
