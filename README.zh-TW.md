@@ -277,6 +277,8 @@ minimax_web_search { query: "TypeScript MCP server 教學" }
 
 回傳搜尋結果（標題、連結、摘要、日期）和相關搜尋建議。
 
+> **為什麼要保留第二個網頁搜尋來源？** 多數 web 工具（firecrawl、tavily）採 credit 或方案計費，額度用完研究就中斷。`minimax_web_search` 走 MiniMax 月額 Token Plan、獨立計費，其他工具額度見底時它仍能正常運作。它回傳的是 snippet（非完整原文擷取），定位上是「不會跟主工具搶額度的穩定第二來源」，而非 firecrawl 的 1:1 替代品。
+
 ### 圖片辨識
 
 ```

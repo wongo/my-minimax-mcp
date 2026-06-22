@@ -281,6 +281,8 @@ minimax_web_search { query: "TypeScript MCP server tutorial" }
 
 Returns organic results (title, link, snippet, date) and related search suggestions.
 
+> **Why keep a second web search source?** Most web tools (firecrawl, tavily) are credit- or plan-capped — when the quota runs out, research stops. `minimax_web_search` is billed independently on your MiniMax monthly Token Plan, so it keeps working when your other tools hit their limit. It returns snippets (not full-page extraction), so think of it as a resilient second source rather than a 1:1 firecrawl replacement.
+
 ### Image Understanding
 
 ```
