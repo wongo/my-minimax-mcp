@@ -36,7 +36,7 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 
 | Tool | Description | Default Model |
 |------|-------------|---------------|
-| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop. Supports tools: `read_file`, `write_file`, `edit_file`, `edit_file_batch`, `run_bash`, `list_files`, `search_content` | `MINIMAX_DEFAULT_MODEL` |
+| `minimax_agent_task` | Autonomous coding: read files, write code, run tests, debug loop. Supports tools: `read_file`, `write_file`, `edit_file`, `edit_file_batch`, `run_bash`, `list_files`, `search_content`, `web_search` | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_generate_code` | Generate code, optionally write to file | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_chat` | Multi-turn conversation with context preservation | `MINIMAX_DEFAULT_MODEL` |
 | `minimax_plan` | Structured implementation plan as JSON | `MINIMAX_DEFAULT_MODEL` |
@@ -139,6 +139,8 @@ All settings via environment variables:
 | `MINIMAX_API_KEY` | API key (required) | — |
 | `MINIMAX_DEFAULT_MODEL` | Default model used by all MiniMax chat/plan/code/agent tools unless a per-call override is supplied | `MiniMax-M2.7` |
 | `MINIMAX_MAX_ITERATIONS` | Agent loop max iterations | `25` |
+| `MINIMAX_MAX_INPUT_TOKENS` | Maximum input tokens per agent task (override for large tasks) | `500000` |
+| `MINIMAX_MAX_WEB_SEARCHES` | Maximum web searches per agent task | `10` |
 | `MINIMAX_TIMEOUT_MS` | Per-task timeout | `300000` (5min) |
 | `MINIMAX_BASH_WHITELIST` | Additional allowed bash commands (comma-separated) | — |
 | `MINIMAX_WORKING_DIR` | Base working directory for file operations; `minimax_agent_task` may only use this directory or a nested subdirectory | `process.cwd()` |
@@ -312,9 +314,10 @@ The agent loop runs with strict sandboxing:
 - **Command chaining blocked**: `&&`, `;`, `|` operators are rejected
 - **Path isolation**: All file operations restricted to the working directory
 - **Agent working-directory boundary**: `minimax_agent_task` can only operate inside `MINIMAX_WORKING_DIR` or one of its subdirectories
-- **Iteration cap**: 25 iterations max per task (configurable)
-- **Timeout**: 5 minutes per task (configurable)
-- **Token budget**: 500K input tokens max per task
+- **Iteration cap**: 25 iterations max per task (configurable via `MINIMAX_MAX_ITERATIONS`)
+- **Timeout**: 5 minutes per task (configurable via `MINIMAX_TIMEOUT_MS`)
+- **Token budget**: 500K input tokens max per task (configurable via `MINIMAX_MAX_INPUT_TOKENS`)
+- **Web search budget**: 10 searches max per task (configurable via `MINIMAX_MAX_WEB_SEARCHES`)
 
 ## Cost
 

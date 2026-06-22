@@ -120,7 +120,7 @@ export class FunctionExecutor {
       return "Error: web search is not available in this session.";
     }
     if (this.searchCount >= this.config.maxWebSearches) {
-      return `Web search budget exhausted (${this.config.maxWebSearches}/${this.config.maxWebSearches}). Use information already gathered.`;
+      return `Web search budget exhausted (${this.searchCount}/${this.config.maxWebSearches}). Use information already gathered.`;
     }
     this.searchCount++;
     try {
