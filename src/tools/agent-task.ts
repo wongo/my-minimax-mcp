@@ -10,6 +10,7 @@ export const agentTaskSchema = z.object({
   workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
   model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model to use (default: MiniMax-M2.5)"),
   maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
+  maxInputTokens: z.number().optional().describe("Maximum input tokens per task (default: 500000, override for large tasks)"),
   systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
 });
 
@@ -35,6 +36,7 @@ export async function agentTask(
     workingDirectory: input.workingDirectory,
     model,
     maxIterations: input.maxIterations,
+    maxInputTokens: input.maxInputTokens,
     systemPrompt: input.systemPrompt,
     webSearch,
     onProgress,

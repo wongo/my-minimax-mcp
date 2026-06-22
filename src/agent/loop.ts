@@ -19,6 +19,7 @@ export interface AgentTaskOptions {
   workingDirectory: string;
   model?: ModelId;
   maxIterations?: number;
+  maxInputTokens?: number;
   systemPrompt?: string;
   webSearch?: (query: string) => Promise<string>;
   onProgress?: OnProgressCallback;
@@ -114,6 +115,7 @@ export async function runAgentLoop(
   const config: SafetyConfig = {
     ...getDefaultSafetyConfig(options.workingDirectory),
     ...(options.maxIterations ? { maxIterations: options.maxIterations } : {}),
+    ...(options.maxInputTokens ? { maxInputTokens: options.maxInputTokens } : {}),
   };
 
   const executor = new FunctionExecutor(config, options.webSearch);

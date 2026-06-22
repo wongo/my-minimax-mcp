@@ -120,6 +120,7 @@ export function createServer(
         workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
         model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
         maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
+        maxInputTokens: z.number().optional().describe("Maximum input tokens per task (default: 500000, override for large tasks)"),
         systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
       },
     },

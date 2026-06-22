@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildIterationLimitDiagnostics } from "../src/agent/loop.ts";
+import { buildIterationLimitDiagnostics, type AgentTaskOptions } from "../src/agent/loop.js";
+import { getDefaultSafetyConfig } from "../src/agent/safety.js";
 
 // ─── stillProgressing=true ────────────────────────────────────────────────────
 
@@ -79,4 +80,20 @@ test("filesModified and lastActions are passed through unchanged", () => {
   const result = buildIterationLimitDiagnostics(lastActions, filesModified, 25);
   assert.deepEqual(result.lastActions, lastActions);
   assert.deepEqual(result.filesModified, filesModified);
+});
+
+// ─── maxInputTokens override ─────────────────────────────────────────────────────
+
+test("maxInputTokens override in AgentTaskOptions passes through to SafetyConfig", async () => {
+  const options: AgentTaskOptions = {
+    task: "test task",
+    workingDirectory: "/tmp",
+    maxInputTokens: 1000000,
+  };
+  const config = {
+    ...getDefaultSafetyConfig(options.workingDirectory),
+    ...(options.maxIterations ? { maxIterations: options.maxIterations } : {}),
+    ...(options.maxInputTokens ? { maxInputTokens: options.maxInputTokens } : {}),
+  };
+  assert.equal(config.maxInputTokens, 1000000);
 });
