@@ -44,6 +44,9 @@ The key feature is the **agent loop**: MiniMax uses function calling to autonomo
 | `minimax_session_tracker` | Cross-session usage tracking with self-improvement modes | — |
 | `minimax_web_search` | Search the web using MiniMax AI | — |
 | `minimax_understand_image` | Analyze images using MiniMax VLM (JPEG/PNG/WebP, max 20MB) | — |
+| `minimax_tts` | Text-to-speech (MiniMax Speech 2.8 T2A v2). Converts text to audio with configurable voice and speed. | — |
+| `minimax_generate_music` | Music generation (MiniMax Music 2.6). Vocal songs from `lyrics`, or instrumental from `prompt`. Synchronous. | — |
+| `minimax_generate_video` | Video generation (MiniMax Hailuo 2.3). Async: submit → poll → retrieve download URL. Up to 5 min. | — |
 
 ## Installation
 
@@ -410,6 +413,14 @@ logs/                       # Runtime JSONL files (gitignored)
 ```
 
 ## Changelog
+
+### v1.6.0 (2026-07-10)
+
+**Three new media tools: TTS, Music, and Video**
+- **`minimax_tts`**: Text-to-speech using MiniMax Speech 2.8 T2A v2. Accepts `text` (required), `voiceId` (default `male-qn-qingse`), `speed` (0.5–2.0, default 1.0), and optional `outputFile` (absolute path, saves as mp3). Returns `{ success, outputFile?, audioSizeBytes, message }`.
+- **`minimax_generate_music`**: Music generation using MiniMax Music 2.6 (`/music_generation`, **synchronous**). Provide `lyrics` for a vocal song (lines separated by `\n`, supports `[Verse]`/`[Chorus]` tags), or `prompt` alone for instrumental (`instrumental: true`). Optional `outputFile`. Audio returned hex-encoded and decoded to mp3. Returns `{ success, audioSizeBytes, outputFile?, message }`.
+- **`minimax_generate_video`**: Video generation using MiniMax Hailuo 2.3. Accepts `prompt` (required), `duration` (6 or 10 s, default 6), `resolution` (`768P`|`1080P`, default `1080P`), `model` (default `MiniMax-Hailuo-2.3`), and optional `outputFile`. **Async** three-step flow: submit → poll `query/video_generation` for `status: "Success"` → `files/retrieve` to get the download URL (polls every 10 s, up to 5 minutes). Returns `{ success, taskId, fileId, videoUrl, outputFile?, message }`.
+  - **Plan requirement:** API video generation needs a Token Plan **Max** tier or available **Credits**. On **Plus** and lower tiers the API returns error `2056` (`Token Plan usage limit reached`) for *any* video model/resolution — TTS and music are included on Plus, but video is not. The tool surfaces this error directly rather than hanging.
 
 ### v1.5.4 (2026-06-22)
 
