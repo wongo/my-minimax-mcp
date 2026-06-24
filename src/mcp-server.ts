@@ -19,6 +19,9 @@ import { chat } from "./tools/chat.js";
 import { plan } from "./tools/plan.js";
 import { webSearch } from "./tools/web-search.js";
 import { understandImage } from "./tools/understand-image.js";
+import { tts } from "./tools/tts.js";
+import { generateMusic } from "./tools/generate-music.js";
+import { generateVideo } from "./tools/generate-video.js";
 import { resolveWorkingDirectory } from "./agent/safety.js";
 import { FailureLogger } from "./utils/failure-logger.js";
 import { Telemetry } from "./utils/telemetry.js";
@@ -357,6 +360,100 @@ export function createServer(
       } catch (err) {
         await failureLogger.record({
           tool: "minimax_understand_image",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+        });
+        return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    "minimax_tts",
+    "Convert text to speech using MiniMax Speech 2.8. Returns audio as a file or reports generation status.",
+    {
+      text: z.string().describe("Text to convert to speech"),
+      voiceId: z.string().optional().describe("Voice ID (default: male-qn-qingse)"),
+      speed: z.number().min(0.5).max(2.0).optional().describe("Speech speed 0.5-2.0 (default: 1.0)"),
+      outputFile: z.string().optional().describe("Absolute file path to save the audio (mp3)"),
+    },
+    async (input) => {
+      const start = Date.now();
+      try {
+        const result = await tts(apiKey, costTracker, input, telemetry);
+        await telemetry.recordSuccess({
+          tool: "minimax_tts",
+          durationMs: Date.now() - start,
+          callerProject: basename(workingDirectory),
+        });
+        return { content: [{ type: "text" as const, text: result }] };
+      } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_tts",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+        });
+        return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    "minimax_generate_music",
+    "Generate music using MiniMax Music 2.6. Provide `lyrics` for a vocal song or `prompt` alone for instrumental music.",
+    {
+      prompt: z.string().optional().describe("Music style/mood/scene description. Required for instrumental mode."),
+      lyrics: z.string().optional().describe("Song lyrics (lines separated by \\n, supports [Verse] [Chorus] tags). Required for vocal songs."),
+      instrumental: z.boolean().optional().describe("If true, generate instrumental music (prompt required, lyrics ignored)"),
+      outputFile: z.string().optional().describe("Absolute file path to save the music (mp3)"),
+    },
+    async (input) => {
+      const start = Date.now();
+      try {
+        const result = await generateMusic(apiKey, costTracker, input as Parameters<typeof generateMusic>[2], telemetry);
+        await telemetry.recordSuccess({
+          tool: "minimax_generate_music",
+          durationMs: Date.now() - start,
+          callerProject: basename(workingDirectory),
+        });
+        return { content: [{ type: "text" as const, text: result }] };
+      } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_generate_music",
+          error: err,
+          toolInput: input,
+          workingDirectory,
+        });
+        return { content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    "minimax_generate_video",
+    "Generate video using MiniMax Hailuo 2.3. Async: submits task, polls every 10s, retrieves download URL, optionally saves to file.",
+    {
+      prompt: z.string().describe("Text description of the video to generate"),
+      duration: z.number().optional().describe("Video duration in seconds: 6 or 10 (default: 6)"),
+      resolution: z.string().optional().describe("Resolution: '768P' or '1080P' (default: '1080P')"),
+      model: z.string().optional().describe("Model: 'MiniMax-Hailuo-2.3' or 'MiniMax-Hailuo-2.3-Fast' (default: 'MiniMax-Hailuo-2.3')"),
+      outputFile: z.string().optional().describe("Absolute file path to save the video (mp4)"),
+    },
+    async (input) => {
+      const start = Date.now();
+      try {
+        const result = await generateVideo(apiKey, costTracker, input as Parameters<typeof generateVideo>[2], telemetry);
+        await telemetry.recordSuccess({
+          tool: "minimax_generate_video",
+          durationMs: Date.now() - start,
+          callerProject: basename(workingDirectory),
+        });
+        return { content: [{ type: "text" as const, text: result }] };
+      } catch (err) {
+        await failureLogger.record({
+          tool: "minimax_generate_video",
           error: err,
           toolInput: input,
           workingDirectory,
