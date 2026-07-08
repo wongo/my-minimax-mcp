@@ -27,7 +27,7 @@ const DEFAULT_BASH_WHITELIST: RegExp[] = [
 // Explicitly blocked patterns (even if matched by whitelist)
 const BASH_BLOCKLIST: RegExp[] = [
   /rm\s+(-rf?|--recursive)/,
-  />\s*\/dev/,
+  />{1,2}\s*(\/|~|\.\.)/,  // redirection to absolute/home/parent paths — escapes cwd (covers /dev too)
   /curl\b.*\|.*sh/,
   /wget\b.*\|.*sh/,
   /chmod\s+777/,
@@ -35,6 +35,8 @@ const BASH_BLOCKLIST: RegExp[] = [
   /eval\b/,
   /\$\(/,       // command substitution
   /`[^`]+`/,    // backtick substitution
+  /\bnode\b.*\s(--eval\b|-e\b|--print\b|-p\b)/,  // node inline code execution bypasses the whitelist
+  /\bfind\b.*\s(-delete|-exec|-execdir|-ok|-okdir)\b/,  // find can delete/exec outside any other guard
 ];
 
 export interface SafetyConfig {

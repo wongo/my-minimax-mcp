@@ -189,11 +189,11 @@ export function createServer(
           tokensUsed: parsedResult.tokensUsed,
         });
 
-        // Soft failure: task completed (no exception) but hit iteration limit
-        if (parsedResult.reason === "iteration_limit") {
+        // Soft failure: task completed (no exception) but hit iteration or token budget limit
+        if (parsedResult.reason === "iteration_limit" || parsedResult.reason === "token_budget") {
           await failureLogger.record({
             tool: "minimax_agent_task",
-            error: new Error(`Reached maximum iterations`),
+            error: new Error(parsedResult.reason === "token_budget" ? "Token budget exceeded" : "Reached maximum iterations"),
             toolInput: { 
               task: input.task, 
               maxIterations: input.maxIterations,

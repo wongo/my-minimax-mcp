@@ -414,6 +414,25 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.7.0 (2026-07-09)
+
+**Sandbox hardening, clearer agent diagnostics, and media tool tests**
+
+*Security — `run_bash` sandbox escapes closed.* The bash whitelist was bypassable three ways, all of which could write or execute outside the working directory:
+- **Redirection escape:** `echo pwned > /home/user/.bashrc` passed, because `echo` is whitelisted and only `> /dev` was blocked. Redirection to any absolute, home (`~`), or parent (`..`) path is now blocked.
+- **Inline code execution:** `node -e "..."` / `node -p "..."` passed via the `^node` whitelist entry, making the whole whitelist moot. `node` with `-e`/`--eval`/`-p`/`--print` is now blocked; running a script file still works.
+- **`find` side effects:** `find / -delete` and `-exec` passed via the `^find` entry. Both are now blocked; plain `find` still works.
+
+*Agent loop diagnostics.*
+- Token-budget exhaustion now reports `reason: "token_budget"` with its own diagnostics suggesting a higher `maxInputTokens` (or task decomposition). It previously reported `reason: "iteration_limit"` and advised raising `maxIterations` — useless advice when the loop ran out of tokens, not turns.
+- `timeout`, `no_tool_calls`, and `task_failed` exits now report the files the agent had already modified. They previously returned an empty `filesChanged`, hiding exactly the information needed to clean up after a failure.
+
+*Media tools.*
+- `minimax_generate_video`: a poll returning `Success` with no `file_id` now raises a malformed-response error instead of silently polling to exhaustion and reporting a misleading timeout.
+- New `MINIMAX_MEDIA_POLL_MS` env var overrides the video poll interval (default 10000 ms).
+
+*Tests.* 171 → **203**. Added coverage for `tts`, `generate_music`, `generate_video`, and `media-shared` (32 new tests), including the three sandbox escape vectors above. The `test`/`coverage` scripts now glob `test/*.test.ts` instead of a hand-maintained file list, so new test files can no longer be silently skipped.
+
 ### v1.6.1 (2026-07-09)
 
 **Release hygiene fix — removes stray files from the published package**
