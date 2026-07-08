@@ -74,11 +74,12 @@ export async function generateVideo(
   }
 
   // ── Step 2: Poll for completion ─────────────────────────────────────────────
-  const maxPolls = 30; // 30 × 10 s = 5 min
+  const pollIntervalMs = Number(process.env.MINIMAX_MEDIA_POLL_MS ?? 10_000); // overridable for tests
+  const maxPolls = 30; // 30 × 10 s = 5 min at the default interval
   let fileId: string | undefined;
 
   for (let i = 0; i < maxPolls; i++) {
-    await sleep(10_000);
+    await sleep(pollIntervalMs);
 
     const pollResponse = await fetch(
       `${MEDIA_BASE_URL}/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
@@ -98,6 +99,10 @@ export async function generateVideo(
 
     if (pollData.status === "Success") {
       fileId = pollData.file_id;
+      if (!fileId) {
+        // Distinguish this from a genuine timeout — the task finished, the response was malformed.
+        throw new Error("Video poll reported Success but returned no file_id");
+      }
       break;
     }
 
@@ -110,7 +115,7 @@ export async function generateVideo(
   }
 
   if (!fileId) {
-    throw new Error(`Video generation timed out after ${maxPolls * 10} seconds`);
+    throw new Error(`Video generation timed out after ${Math.round((maxPolls * pollIntervalMs) / 1000)} seconds`);
   }
 
   // ── Step 3: Retrieve download URL ───────────────────────────────────────────

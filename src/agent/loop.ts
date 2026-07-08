@@ -32,7 +32,7 @@ export interface AgentTaskResult {
   iterations: number;
   tokensUsed: TokenUsage;
   cost: number;
-  reason?: "iteration_limit" | "timeout" | "task_complete" | "task_failed" | "no_tool_calls";
+  reason?: "iteration_limit" | "token_budget" | "timeout" | "task_complete" | "task_failed" | "no_tool_calls";
   diagnostics?: {
     lastActions: string[];
     filesModified: string[];
@@ -88,18 +88,40 @@ function describeToolCall(name: string, argsJson: string): string {
   }
 }
 
+function isStillProgressing(lastActions: string[]): boolean {
+  return lastActions.some(
+    a => a.startsWith("write_file") || a.startsWith("edit_file") || a.startsWith("edit_file_batch"),
+  );
+}
+
 export function buildIterationLimitDiagnostics(
   lastActions: string[],
   filesModified: string[],
   maxIterations: number,
 ): NonNullable<AgentTaskResult["diagnostics"]> {
-  const stillProgressing = lastActions.some(
-    a => a.startsWith("write_file") || a.startsWith("edit_file") || a.startsWith("edit_file_batch"),
-  );
+  const stillProgressing = isStillProgressing(lastActions);
   const suggested = Math.ceil(maxIterations * 1.5);
   const suggestion = stillProgressing
     ? `Retry with maxIterations=${suggested} — agent was still modifying files in final iterations`
     : `Agent was not modifying files in final iterations (likely stuck in info-gathering or thrashing). Consider decomposing the task into smaller agent_task calls instead of just raising maxIterations.`;
+  return {
+    lastActions,
+    filesModified,
+    stillProgressing,
+    suggestion,
+  };
+}
+
+export function buildTokenBudgetDiagnostics(
+  lastActions: string[],
+  filesModified: string[],
+  maxInputTokens: number,
+): NonNullable<AgentTaskResult["diagnostics"]> {
+  const stillProgressing = isStillProgressing(lastActions);
+  const suggested = Math.ceil((maxInputTokens * 1.5) / 100_000) * 100_000;
+  const suggestion = stillProgressing
+    ? `Retry with maxInputTokens=${suggested} — agent was still modifying files when the token budget ran out`
+    : `Agent was not modifying files when the token budget ran out (likely stuck re-reading large context). Decompose the task into smaller agent_task calls rather than raising maxInputTokens.`;
   return {
     lastActions,
     filesModified,
@@ -137,7 +159,7 @@ export async function runAgentLoop(
       return {
         success: false,
         summary: `Timeout after ${iterations} iterations`,
-        filesChanged: [],
+        filesChanged: Array.from(filesModified),
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
@@ -176,11 +198,11 @@ export async function runAgentLoop(
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
-        reason: "iteration_limit",
-        diagnostics: buildIterationLimitDiagnostics(
+        reason: "token_budget",
+        diagnostics: buildTokenBudgetDiagnostics(
           [...recentActions],
           Array.from(filesModified),
-          config.maxIterations,
+          config.maxInputTokens,
         ),
       };
     }
@@ -192,7 +214,7 @@ export async function runAgentLoop(
       return {
         success: false,
         summary: response.content ?? "Model responded without completing the task",
-        filesChanged: [],
+        filesChanged: Array.from(filesModified),
         iterations,
         tokensUsed: totalUsage,
         cost: calculateCost(totalUsage, model),
@@ -258,7 +280,7 @@ export async function runAgentLoop(
           return {
             success: false,
             summary: parsed.reason,
-            filesChanged: [],
+            filesChanged: Array.from(filesModified),
             iterations,
             tokensUsed: totalUsage,
             cost: calculateCost(totalUsage, model),

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildIterationLimitDiagnostics, type AgentTaskOptions } from "../src/agent/loop.js";
+import { buildIterationLimitDiagnostics, buildTokenBudgetDiagnostics, type AgentTaskOptions } from "../src/agent/loop.js";
 import { getDefaultSafetyConfig } from "../src/agent/safety.js";
 
 // ─── stillProgressing=true ────────────────────────────────────────────────────
@@ -80,6 +80,44 @@ test("filesModified and lastActions are passed through unchanged", () => {
   const result = buildIterationLimitDiagnostics(lastActions, filesModified, 25);
   assert.deepEqual(result.lastActions, lastActions);
   assert.deepEqual(result.filesModified, filesModified);
+});
+
+// ─── token budget diagnostics ────────────────────────────────────────────────
+// Regression: token-budget exhaustion used to reuse the iteration-limit
+// diagnostics, telling callers to raise maxIterations — useless advice when
+// the loop ran out of tokens, not turns.
+
+test("token budget diagnostics suggest raising maxInputTokens, not maxIterations", () => {
+  const result = buildTokenBudgetDiagnostics(
+    ["read_file → foo.ts", "edit_file → bar.ts"],
+    ["bar.ts"],
+    500_000,
+  );
+  assert.equal(result.stillProgressing, true);
+  assert.ok(
+    result.suggestion.includes("maxInputTokens="),
+    `expected "maxInputTokens=" in suggestion: ${result.suggestion}`,
+  );
+  assert.ok(
+    !result.suggestion.includes("maxIterations="),
+    `suggestion must not mention maxIterations: ${result.suggestion}`,
+  );
+});
+
+test("token budget suggested value is rounded up to the next 100k — 500k → 800k", () => {
+  const result = buildTokenBudgetDiagnostics(["write_file → foo.ts"], ["foo.ts"], 500_000);
+  assert.ok(result.suggestion.includes("800000"), `expected "800000" in: ${result.suggestion}`);
+});
+
+test("token budget diagnostics recommend decomposition when not progressing", () => {
+  const result = buildTokenBudgetDiagnostics(
+    ["read_file → a.ts", "read_file → b.ts", "search_content → x"],
+    [],
+    500_000,
+  );
+  assert.equal(result.stillProgressing, false);
+  assert.ok(result.suggestion.includes("Decompose"), `expected "Decompose" in: ${result.suggestion}`);
+  assert.ok(!result.suggestion.includes("maxInputTokens="), result.suggestion);
 });
 
 // ─── maxInputTokens override ─────────────────────────────────────────────────────
