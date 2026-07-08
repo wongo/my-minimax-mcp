@@ -1,5 +1,7 @@
 import type { ModelId } from "./types.js";
 
+const REQUEST_TIMEOUT_MS = 60_000;
+
 export interface WebSearchResult {
   title: string;
   link: string;
@@ -36,15 +38,25 @@ export class CodingPlanClient {
 
   private async request<T>(path: string, body: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "MM-API-Source": "Minimax-MCP",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "MM-API-Source": "Minimax-MCP",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        // A bare fetch never gives up; a stalled socket would hang the MCP tool forever.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+        throw new Error(`Request to ${path} timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       const error = new Error(`HTTP error ${response.status}`);

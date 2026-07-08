@@ -52,7 +52,10 @@ export interface ChatResponse {
 
 // Cost per 1M tokens in USD
 export const MODEL_PRICING: Record<ModelId, { input: number; output: number }> = {
-  "MiniMax-M3": { input: 0.60, output: 2.40 }, // intro 50% off ($0.30/$1.20) through 2026-06-07
+  // M3's list price is $0.60/$2.40, but MiniMax applies a permanent 50% discount
+  // for requests up to 512k input tokens — which is every request we make, since
+  // maxInputTokens defaults to 500k. Above 512k the rate doubles back to list.
+  "MiniMax-M3": { input: 0.30, output: 1.20 },
 
   "MiniMax-M2.7": { input: 0.30, output: 1.20 },
   "MiniMax-M2.5": { input: 0.118, output: 0.99 },
