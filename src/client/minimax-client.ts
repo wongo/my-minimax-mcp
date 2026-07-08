@@ -17,7 +17,7 @@ export class MiniMaxClient {
   private client: OpenAI;
   private defaultModel: ModelId;
 
-  constructor(apiKey: string, defaultModel: ModelId = "MiniMax-M2.5") {
+  constructor(apiKey: string, defaultModel: ModelId = "MiniMax-M2.7") {
     this.client = new OpenAI({
       apiKey,
       baseURL: DEFAULT_BASE_URL,

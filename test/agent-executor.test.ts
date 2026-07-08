@@ -472,3 +472,159 @@ test("edit_file_batch atomicity: write failure leaves original file unchanged an
   assert.equal(tmpFiles.length, 0, `Unexpected .tmp files left: ${tmpFiles.join(", ")}`);
 });
 
+// ── Fix #1: list_files ignores heavy directories ─────────────────────────────
+
+test("list_files ignores node_modules, .git, dist", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-ignores-"));
+  await mkdir(join(workingDirectory, "src"), { recursive: true });
+  await mkdir(join(workingDirectory, "node_modules/pkg"), { recursive: true });
+  await mkdir(join(workingDirectory, ".git"), { recursive: true });
+  await mkdir(join(workingDirectory, "dist"), { recursive: true });
+  await writeFile(join(workingDirectory, "src/a.ts"), "export const a = 1;\n");
+  await writeFile(join(workingDirectory, "node_modules/pkg/b.ts"), "export const b = 2;\n");
+  await writeFile(join(workingDirectory, ".git/config"), "[core]\n");
+  await writeFile(join(workingDirectory, "dist/out.js"), "console.log(1);\n");
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  const result = await executor.execute("list_files", { pattern: "**/*" });
+
+  assert.match(result, /src\/a\.ts/, `Expected src/a.ts in result, got: ${result}`);
+  assert.doesNotMatch(result, /node_modules/, `node_modules should not appear, got: ${result}`);
+  assert.doesNotMatch(result, /\.git/, `.git should not appear, got: ${result}`);
+  assert.doesNotMatch(result, /dist/, `dist should not appear, got: ${result}`);
+});
+
+// ── Fix #2: search_content distinguishes no-match from error ─────────────────
+
+test("search_content returns 'No matches found' for a legitimate no-match (grep exits 1)", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-se-"));
+  await writeFile(join(workingDirectory, "sample.txt"), "hello world\n");
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  const result = await executor.execute("search_content", { pattern: "DEFINITELY_NOT_PRESENT_xyz", path: undefined });
+
+  assert.equal(result, "No matches found");
+});
+
+test("search_content returns matches when pattern is found", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-se-"));
+  const filePath = join(workingDirectory, "sample.txt");
+  await writeFile(filePath, "hello world\nfoo bar\n");
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  const result = await executor.execute("search_content", { pattern: "foo", path: undefined });
+
+  assert.ok(result.includes("sample.txt"), `Expected file name in result, got: ${result}`);
+  assert.ok(result.includes("foo"), `Expected 'foo' in result, got: ${result}`);
+});
+
+test("search_content throws on invalid regex (grep exits 2), does not return 'No matches found'", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-se-"));
+  await writeFile(join(workingDirectory, "sample.txt"), "hello world\n");
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  let threw = false;
+  let errorMessage = "";
+  try {
+    // Invalid regex: unbalanced bracket
+    await executor.execute("search_content", { pattern: "[", path: undefined });
+  } catch (err) {
+    threw = true;
+    errorMessage = err instanceof Error ? err.message : String(err);
+  }
+
+  assert.ok(threw, "Should have thrown on invalid regex");
+  assert.ok(
+    errorMessage.includes("search_content failed"),
+    `Expected 'search_content failed' in error, got: ${errorMessage}`,
+  );
+  assert.ok(
+    !errorMessage.includes("No matches found"),
+    `Should NOT say 'No matches found' for a real error, got: ${errorMessage}`,
+  );
+});
+
+// grep exits 2 on any error — including one unreadable file — even when it already
+// matched elsewhere and wrote those matches to stdout. Failing the whole search in
+// that case loses results the agent needs. Skipped when running as root, which can
+// read the unreadable file and so never triggers the exit-2 path.
+test("search_content returns partial matches when grep errors on one file but matched others", { skip: process.getuid?.() === 0 ? "runs as root" : false }, async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-partial-"));
+  await writeFile(join(workingDirectory, "readable.txt"), "needle here\n");
+  const locked = join(workingDirectory, "locked.txt");
+  await writeFile(locked, "needle also here\n");
+  await chmod(locked, 0o000);
+
+  try {
+    const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+    const result = await executor.execute("search_content", { pattern: "needle" });
+
+    assert.ok(result.includes("readable.txt"), `expected the readable match, got: ${result}`);
+    assert.ok(!result.includes("No matches found"), `should not report no matches, got: ${result}`);
+  } finally {
+    await chmod(locked, 0o600).catch(() => {});
+  }
+});
+
+// ── Fix #3: write_file and edit_file are atomic (no .tmp left behind) ────────
+
+test("write_file creates parent directories and writes file atomically", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-atomic-"));
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+
+  await executor.execute("write_file", {
+    path: "nested/deep/x.txt",
+    content: "deep content\n",
+  });
+
+  const filePath = join(workingDirectory, "nested/deep/x.txt");
+  const content = await readFile(filePath, "utf-8");
+  assert.equal(content, "deep content\n");
+
+  // No .tmp artifact left behind
+  const entries = await readdir(workingDirectory, { recursive: true });
+  const tmpFiles = entries.filter((e) => String(e).endsWith(".tmp"));
+  assert.equal(tmpFiles.length, 0, `Unexpected .tmp files left: ${tmpFiles.join(", ")}`);
+});
+
+test("write_file atomicity: no .tmp artifact left behind after successful write", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-atomic-"));
+  const filePath = join(workingDirectory, "atomic_write.txt");
+  await writeFile(filePath, "initial\n");
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  await executor.execute("write_file", {
+    path: "atomic_write.txt",
+    content: "updated\n",
+  });
+
+  const content = await readFile(filePath, "utf-8");
+  assert.equal(content, "updated\n");
+
+  // No .tmp files should remain in the directory
+  const entries = await readdir(workingDirectory);
+  const tmpFiles = entries.filter((e) => e.endsWith(".tmp"));
+  assert.equal(tmpFiles.length, 0, `Unexpected .tmp files left: ${tmpFiles.join(", ")}`);
+});
+
+test("edit_file atomicity: no .tmp artifact left behind after successful edit", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-atomic-"));
+  const filePath = join(workingDirectory, "atomic_edit.txt");
+  await writeFile(filePath, "const val = 1;\n");
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  await executor.execute("edit_file", {
+    path: "atomic_edit.txt",
+    old_string: "const val = 1;",
+    new_string: "const val = 99;",
+  });
+
+  const content = await readFile(filePath, "utf-8");
+  assert.ok(content.includes("const val = 99;"));
+
+  // No .tmp files should remain in the directory
+  const entries = await readdir(workingDirectory);
+  const tmpFiles = entries.filter((e) => e.endsWith(".tmp"));
+  assert.equal(tmpFiles.length, 0, `Unexpected .tmp files left: ${tmpFiles.join(", ")}`);
+});
+

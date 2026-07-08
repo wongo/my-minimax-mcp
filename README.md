@@ -414,6 +414,31 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.8.0 (2026-07-09)
+
+**Cost accuracy, network deadlines, and agent tool robustness**
+
+*`minimax_cost_report` was overcharging M3 by 2×.* `MODEL_PRICING` used M3's list price (`$0.60`/`$2.40` per 1M tokens). MiniMax applies a **permanent** 50% discount up to 512k input tokens — not the expiring introductory discount an out-of-date comment claimed. Since `maxInputTokens` defaults to 500k, every request we make bills at `$0.30`/`$1.20`. Corrected, so cost and savings reports no longer double-count M3 usage.
+
+*Every network call now has a deadline.* A bare `fetch()` never gives up, so a stalled socket hung the MCP tool forever. Timeouts are sized per call type rather than one blunt value — synchronous music/TTS generation legitimately runs for minutes, while a status poll should not:
+
+| Call type | Timeout |
+|-----------|---------|
+| Music / TTS generation | 300 s |
+| Video submit, poll, retrieve; web search; image understanding | 30–60 s |
+| Media download | 300 s |
+
+*Agent tools.*
+- **`list_files` no longer walks `node_modules`, `.git`, `dist`, `build`, `.next`, `coverage`, `.venv`, `__pycache__`, `.cache`.** On a real project it previously enumerated every dependency file — a latency and token sink.
+- **`search_content` no longer reports every failure as "No matches found."** A bad regex, an unreadable path, or a timeout now raise a real error. When `grep` errors on one file but matched others, the partial matches are returned rather than failing the whole search.
+- **`write_file` and `edit_file` now write atomically** (temp file + rename), matching `edit_file_batch`. A crash mid-write can no longer truncate the file being edited.
+
+*Consistency.* `MiniMaxClient`'s constructor defaulted to `MiniMax-M2.5` while the env default, `CodingPlanClient`, and every registered tool schema used `MiniMax-M2.7`. All callers passed a model explicitly so nothing broke, but the mismatch was a landmine. Now M2.7 throughout.
+
+*Media output.* `outputFile` now creates missing parent directories. It remains an unrestricted absolute path by design — these tools are invoked by the MCP client, not the sandboxed agent, and the documented contract is an absolute path. This is stated explicitly in `media-shared.ts` so it reads as a decision rather than an oversight.
+
+*Tests.* 203 → **211**.
+
 ### v1.7.0 (2026-07-09)
 
 **Sandbox hardening, clearer agent diagnostics, and media tool tests**

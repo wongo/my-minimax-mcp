@@ -1,8 +1,7 @@
-import { writeFile } from "node:fs/promises";
 import { z } from "zod";
 import type { CostTracker } from "../utils/cost-tracker.js";
 import type { Telemetry } from "../utils/telemetry.js";
-import { MEDIA_BASE_URL, assertBaseResp } from "./media-shared.js";
+import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, assertBaseResp, fetchWithTimeout, writeMediaFile } from "./media-shared.js";
 
 export const generateMusicSchema = z
   .object({
@@ -81,14 +80,14 @@ export async function generateMusic(
   }
 
   // ── Submit (synchronous — no polling) ──────────────────────────────────────
-  const response = await fetch(`${MEDIA_BASE_URL}/music_generation`, {
+  const response = await fetchWithTimeout(`${MEDIA_BASE_URL}/music_generation`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(requestBody),
-  });
+  }, MEDIA_TIMEOUT_MS.generation, "Music generation request");
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
@@ -122,7 +121,7 @@ export async function generateMusic(
   const audioSizeBytes = audioBuffer.length;
 
   if (input.outputFile) {
-    await writeFile(input.outputFile, audioBuffer);
+    await writeMediaFile(input.outputFile, audioBuffer);
     outputFile = input.outputFile;
   }
 

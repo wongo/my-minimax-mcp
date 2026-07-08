@@ -1,8 +1,7 @@
-import { writeFile } from "node:fs/promises";
 import { z } from "zod";
 import type { CostTracker } from "../utils/cost-tracker.js";
 import type { Telemetry } from "../utils/telemetry.js";
-import { MEDIA_BASE_URL } from "./media-shared.js";
+import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, fetchWithTimeout, writeMediaFile } from "./media-shared.js";
 
 export const ttsSchema = z.object({
   text: z.string().describe("Text to convert to speech"),
@@ -27,7 +26,7 @@ export async function tts(
   const voiceId = input.voiceId ?? "male-qn-qingse";
   const speed = input.speed ?? 1.0;
 
-  const response = await fetch(`${MEDIA_BASE_URL}/t2a_v2`, {
+  const response = await fetchWithTimeout(`${MEDIA_BASE_URL}/t2a_v2`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -42,7 +41,7 @@ export async function tts(
         speed,
       },
     }),
-  });
+  }, MEDIA_TIMEOUT_MS.generation, "TTS request");
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
@@ -84,7 +83,7 @@ export async function tts(
   audioSizeBytes = audioBuffer.length;
 
   if (input.outputFile) {
-    await writeFile(input.outputFile, audioBuffer);
+    await writeMediaFile(input.outputFile, audioBuffer);
     outputFile = input.outputFile;
   }
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CostTracker } from "../utils/cost-tracker.js";
 import type { Telemetry } from "../utils/telemetry.js";
-import { MEDIA_BASE_URL, sleep, downloadToFile, assertBaseResp } from "./media-shared.js";
+import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, sleep, downloadToFile, assertBaseResp, fetchWithTimeout } from "./media-shared.js";
 
 export const generateVideoSchema = z.object({
   prompt: z.string().describe("Text description of the video to generate"),
@@ -44,7 +44,7 @@ export async function generateVideo(
   const resolution = input.resolution ?? "1080P";
 
   // ── Step 1: Submit ──────────────────────────────────────────────────────────
-  const submitResponse = await fetch(`${MEDIA_BASE_URL}/video_generation`, {
+  const submitResponse = await fetchWithTimeout(`${MEDIA_BASE_URL}/video_generation`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -57,7 +57,7 @@ export async function generateVideo(
       resolution,
       prompt_optimizer: true,
     }),
-  });
+  }, MEDIA_TIMEOUT_MS.control, "Video submission");
 
   if (!submitResponse.ok) {
     const errorBody = await submitResponse.text().catch(() => "");
@@ -81,11 +81,11 @@ export async function generateVideo(
   for (let i = 0; i < maxPolls; i++) {
     await sleep(pollIntervalMs);
 
-    const pollResponse = await fetch(
+    const pollResponse = await fetchWithTimeout(
       `${MEDIA_BASE_URL}/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
-      {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      },
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+      MEDIA_TIMEOUT_MS.control,
+      "Video status poll",
     );
 
     if (!pollResponse.ok) {
@@ -119,11 +119,11 @@ export async function generateVideo(
   }
 
   // ── Step 3: Retrieve download URL ───────────────────────────────────────────
-  const retrieveResponse = await fetch(
+  const retrieveResponse = await fetchWithTimeout(
     `${MEDIA_BASE_URL}/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
-    {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    },
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+    MEDIA_TIMEOUT_MS.control,
+    "Video file retrieve",
   );
 
   if (!retrieveResponse.ok) {

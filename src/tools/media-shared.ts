@@ -1,26 +1,69 @@
-import { writeFile } from "node:fs/promises";
-import type { CostTracker } from "../utils/cost-tracker.js";
-import type { Telemetry } from "../utils/telemetry.js";
+import { writeFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 
 export const MEDIA_BASE_URL = "https://api.minimax.io/v1";
+
+/**
+ * Per-call-type deadlines. A bare fetch() has no timeout, so a stalled socket
+ * hangs the MCP tool forever. These are ceilings, not expectations — sized so a
+ * healthy call never trips them.
+ */
+export const MEDIA_TIMEOUT_MS = {
+  /** Synchronous generation: music and TTS render server-side and can run for minutes. */
+  generation: 300_000,
+  /** Short JSON round-trips: task submit, status poll, file retrieve. */
+  control: 30_000,
+  /** Pulling a rendered video or song off the CDN. */
+  download: 300_000,
+} as const;
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export interface DownloadResult {
-  bytesWritten: number;
+/**
+ * fetch() with a hard deadline. Converts the runtime's TimeoutError/AbortError
+ * into a message that names the call that stalled.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  context: string,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new Error(`${context} timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Write generated media to an absolute path chosen by the caller.
+ *
+ * These tools are invoked by the MCP client (Claude), not by the sandboxed
+ * MiniMax agent, so `outputFile` is deliberately NOT confined to the working
+ * directory the way `safeWriteFile` confines agent writes — the caller already
+ * has whatever filesystem access the MCP process has, and pinning output to the
+ * project root would break the documented "absolute path" contract.
+ * Parent directories are created so callers can name a fresh folder.
+ */
+export async function writeMediaFile(outputFile: string, data: Buffer): Promise<number> {
+  await mkdir(dirname(outputFile), { recursive: true });
+  await writeFile(outputFile, data);
+  return data.length;
 }
 
 export async function downloadToFile(url: string, outputFile: string): Promise<number> {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {}, MEDIA_TIMEOUT_MS.download, `Download of ${url}`);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} when downloading: ${url}`);
   }
   const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  await writeFile(outputFile, buffer);
-  return buffer.length;
+  return writeMediaFile(outputFile, Buffer.from(arrayBuffer));
 }
 
 export function assertBaseResp(

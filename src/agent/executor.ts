@@ -6,6 +6,18 @@ import { validateFilePath, validateBashCommand, type SafetyConfig } from "./safe
 
 const execFileAsync = promisify(execFile);
 
+/** Directories never worth walking for list_files — huge, generated, or VCS internals. */
+const IGNORED_DIRECTORIES = new Set([
+  "node_modules", ".git", "dist", "build", ".next", "coverage", ".venv", "__pycache__", ".cache",
+]);
+
+const SEARCH_TIMEOUT_MS = 10_000;
+const MAX_OUTPUT_CHARS = 10_000;
+
+function truncateOutput(s: string): string {
+  return s.length > MAX_OUTPUT_CHARS ? s.slice(0, MAX_OUTPUT_CHARS) + "\n... (truncated)" : s;
+}
+
 export class FunctionExecutor {
   private searchCount = 0;
   constructor(
@@ -52,7 +64,7 @@ export class FunctionExecutor {
   private async writeFile(path: string, content: string): Promise<string> {
     const resolved = validateFilePath(path, this.config.workingDirectory);
     await mkdir(dirname(resolved), { recursive: true });
-    await writeFile(resolved, content, "utf-8");
+    await atomicWrite(resolved, content);
     return `File written: ${path}`;
   }
 
@@ -60,7 +72,7 @@ export class FunctionExecutor {
     const resolved = validateFilePath(path, this.config.workingDirectory);
     const content = await readFile(resolved, "utf-8");
     const { newContent, matchType } = applyEdit(content, oldString, newString, path);
-    await writeFile(resolved, newContent, "utf-8");
+    await atomicWrite(resolved, newContent);
     return matchType === "fuzzy" ? `File edited (fuzzy match): ${path}` : `File edited: ${path}`;
   }
 
@@ -138,13 +150,28 @@ export class FunctionExecutor {
     args.push(pattern, searchPath);
     try {
       const { stdout } = await execFileAsync("grep", args, {
-        timeout: 10_000,
+        timeout: SEARCH_TIMEOUT_MS,
         maxBuffer: 1024 * 1024,
       });
-      const result = stdout.trim();
-      return result.length > 10_000 ? result.slice(0, 10_000) + "\n... (truncated)" : result;
-    } catch {
-      return "No matches found";
+      return truncateOutput(stdout.trim());
+    } catch (err: unknown) {
+      const e = err as { code?: number; killed?: boolean; signal?: string; stderr?: string; stdout?: string };
+      if (e.code === 1) {
+        // grep exits 1 when there are no matches — legitimate, not an error
+        return "No matches found";
+      }
+      if (e.killed || e.signal) {
+        throw new Error(`search_content timed out after ${SEARCH_TIMEOUT_MS / 1000}s: ${pattern}`);
+      }
+      // grep exits 2 on *any* error — including a single unreadable file — even when
+      // it matched elsewhere and already wrote those matches to stdout. Partial
+      // results beat failing the whole search.
+      const partial = e.stdout?.trim();
+      if (partial) {
+        return truncateOutput(partial);
+      }
+      const stderrHint = e.stderr ? ` (${e.stderr.trim()})` : "";
+      throw new Error(`search_content failed${stderrHint}`);
     }
   }
 
@@ -153,11 +180,10 @@ export class FunctionExecutor {
     const files: string[] = [];
 
     for (const entry of entries) {
-      const fullPath = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...await this.walkFiles(fullPath));
+      if (entry.isDirectory() && !IGNORED_DIRECTORIES.has(entry.name)) {
+        files.push(...await this.walkFiles(join(directory, entry.name)));
       } else if (entry.isFile()) {
-        files.push(fullPath);
+        files.push(join(directory, entry.name));
       }
     }
 
