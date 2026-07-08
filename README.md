@@ -414,6 +414,13 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
+### v1.6.1 (2026-07-09)
+
+**Release hygiene fix — removes stray files from the published package**
+- Removed `dist/app/sitemap.js` (a non-source artifact accidentally shipped in 1.6.0) and its committed source, plus an unrelated script that belonged to a different project.
+- Added `clean` and `prepublishOnly` scripts: every publish now runs a clean build + full test suite, so stale `dist/` output can never ship again.
+- No functional changes to any tool.
+
 ### v1.6.0 (2026-07-10)
 
 **Three new media tools: TTS, Music, and Video**
