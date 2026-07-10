@@ -427,7 +427,7 @@ logs/                       # Runtime JSONL files (gitignored)
 
 ## Changelog
 
-### Unreleased (2026-07-11)
+### v1.8.1 (2026-07-11)
 
 **Security, reliability, CLI packaging, and input validation**
 
