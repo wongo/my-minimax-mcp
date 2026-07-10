@@ -67,7 +67,7 @@ export const AGENT_FUNCTIONS: FunctionDefinition[] = [
       type: "object",
       properties: {
         command: { type: "string", description: "Shell command to execute" },
-        timeout_ms: { type: "number", description: "Optional timeout in milliseconds (default: 30000)" },
+        timeout_ms: { type: "integer", minimum: 1, description: "Optional timeout in milliseconds (default: 30000)" },
       },
       required: ["command"],
     },

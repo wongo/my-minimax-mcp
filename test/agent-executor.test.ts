@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readFile, readdir, chmod } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, readdir, chmod, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FunctionExecutor } from "../src/agent/executor.ts";
@@ -607,6 +607,30 @@ test("write_file atomicity: no .tmp artifact left behind after successful write"
   assert.equal(tmpFiles.length, 0, `Unexpected .tmp files left: ${tmpFiles.join(", ")}`);
 });
 
+test("write_file preserves permissions when atomically replacing an existing file", async () => {
+  if (process.platform === "win32") return;
+
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-mode-"));
+  const filePath = join(workingDirectory, "script.sh");
+  await writeFile(filePath, "old\n");
+  await chmod(filePath, 0o751);
+
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+  await executor.execute("write_file", { path: "script.sh", content: "new\n" });
+
+  assert.equal((await stat(filePath)).mode & 0o777, 0o751);
+});
+
+test("run_bash rejects invalid timeout values", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-timeout-"));
+  const executor = new FunctionExecutor(getDefaultSafetyConfig(workingDirectory));
+
+  await assert.rejects(
+    () => executor.execute("run_bash", { command: "echo ok", timeout_ms: -1 }),
+    /timeout_ms must be a positive integer/,
+  );
+});
+
 test("edit_file atomicity: no .tmp artifact left behind after successful edit", async () => {
   const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-executor-atomic-"));
   const filePath = join(workingDirectory, "atomic_edit.txt");
@@ -627,4 +651,3 @@ test("edit_file atomicity: no .tmp artifact left behind after successful edit", 
   const tmpFiles = entries.filter((e) => e.endsWith(".tmp"));
   assert.equal(tmpFiles.length, 0, `Unexpected .tmp files left: ${tmpFiles.join(", ")}`);
 });
-

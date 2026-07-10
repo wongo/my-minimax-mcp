@@ -180,6 +180,61 @@ describe("image utilities", () => {
 
         const result = await toBase64DataUrl("https://example.com/image.png");
         assert.ok(result.startsWith("data:image/png;base64,"));
+        const fetchInit = mockFetch.mock.calls[0].arguments[1] as RequestInit;
+        assert.ok(fetchInit.signal, "remote image fetch should have an abort deadline");
+      });
+
+      it("rejects an oversized Content-Length before reading the body", async () => {
+        let bodyRead = false;
+        mockFetch.mock.mockImplementation(async () => ({
+          ok: true,
+          headers: new Headers({
+            "Content-Type": "image/png",
+            "Content-Length": String(21 * 1024 * 1024),
+          }),
+          arrayBuffer: async () => {
+            bodyRead = true;
+            return new ArrayBuffer(0);
+          },
+        }));
+
+        await assert.rejects(
+          () => toBase64DataUrl("https://example.com/huge.png"),
+          /Image exceeds 20MB limit/,
+        );
+        assert.equal(bodyRead, false);
+      });
+
+      it("stops a chunked response once it exceeds the size limit", async () => {
+        const response = new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(12 * 1024 * 1024));
+              controller.enqueue(new Uint8Array(9 * 1024 * 1024));
+              controller.close();
+            },
+          }),
+          { headers: { "Content-Type": "image/png" } },
+        );
+        mockFetch.mock.mockImplementation(async () => response);
+
+        await assert.rejects(
+          () => toBase64DataUrl("https://example.com/chunked.png"),
+          /Image exceeds 20MB limit/,
+        );
+      });
+
+      it("normalizes fetch timeout errors", async () => {
+        mockFetch.mock.mockImplementation(async () => {
+          const error = new Error("aborted");
+          error.name = "TimeoutError";
+          throw error;
+        });
+
+        await assert.rejects(
+          () => toBase64DataUrl("https://example.com/slow.png"),
+          /Image fetch timed out after 30s/,
+        );
       });
 
       it("rejects URL with unsupported Content-Type (text/html)", async () => {

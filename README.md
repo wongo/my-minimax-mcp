@@ -27,7 +27,10 @@ Claude Code (Opus) ─── orchestrator
     ├── minimax_cost_report      → session cost tracking
     ├── minimax_session_tracker  → cross-session usage tracking (auto-persist on shutdown)
     ├── minimax_web_search       → web search via MiniMax Coding Plan API
-    └── minimax_understand_image → image analysis via MiniMax VLM
+    ├── minimax_understand_image → image analysis via MiniMax VLM
+    ├── minimax_tts              → text-to-speech generation
+    ├── minimax_generate_music   → vocal or instrumental music generation
+    └── minimax_generate_video   → asynchronous video generation
 ```
 
 The key feature is the **agent loop**: MiniMax uses function calling to autonomously read files, write code, run tests, and debug — equivalent to a Sonnet sub-agent, but without consuming Claude subscription tokens.
@@ -108,7 +111,7 @@ Or manually edit `~/.claude/settings.json`:
 
 > **Note**: Use `claude mcp add` for the simplest setup, or edit `~/.claude/settings.json` directly.
 
-Restart Claude Code. The 8 tools will appear automatically. Verify with `claude mcp list`.
+Restart Claude Code. The 11 tools will appear automatically. Verify with `claude mcp list`.
 
 ### 5. Enable Self-Improvement Loop (Optional)
 
@@ -122,16 +125,19 @@ This displays the CLAUDE.md template and creates the usage log. Copy the templat
 
 ```bash
 # Code generation
-npx tsx src/cli.ts --task "fibonacci in Python" --language python
+npx my-minimax-mcp --task "fibonacci in Python" --language python
 
 # Chat
-npx tsx src/cli.ts --mode chat --task "explain async/await"
+npx my-minimax-mcp --mode chat --task "explain async/await"
 
 # Autonomous agent
-npx tsx src/cli.ts --mode agent --task "fix the failing tests" --dir ./my-project
+npx my-minimax-mcp --mode agent --task "fix the failing tests" --dir ./my-project
+
+# Help does not require an API key
+npx my-minimax-mcp --help
 ```
 
-CLI runs also append to `MINIMAX_COST_LOG`, so `--end-session` and `--savings-report` include normal CLI usage in addition to MCP usage.
+Bare invocation (`npx my-minimax-mcp`) starts the stdio MCP server. Supplying CLI arguments routes to the local CLI. CLI runs also append to `MINIMAX_COST_LOG`, so `--end-session` and `--savings-report` include normal CLI usage in addition to MCP usage.
 
 ## Configuration
 
@@ -141,11 +147,11 @@ All settings via environment variables:
 |----------|-------------|---------|
 | `MINIMAX_API_KEY` | API key (required) | — |
 | `MINIMAX_DEFAULT_MODEL` | Default model used by all MiniMax chat/plan/code/agent tools unless a per-call override is supplied | `MiniMax-M2.7` |
-| `MINIMAX_MAX_ITERATIONS` | Agent loop max iterations | `25` |
-| `MINIMAX_MAX_INPUT_TOKENS` | Maximum input tokens per agent task (override for large tasks) | `500000` |
-| `MINIMAX_MAX_WEB_SEARCHES` | Maximum web searches per agent task | `10` |
-| `MINIMAX_TIMEOUT_MS` | Per-task timeout | `300000` (5min) |
-| `MINIMAX_BASH_WHITELIST` | Additional allowed bash commands (comma-separated) | — |
+| `MINIMAX_MAX_ITERATIONS` | Agent loop max iterations; must be a positive integer | `25` |
+| `MINIMAX_MAX_INPUT_TOKENS` | Maximum input tokens per agent task; must be a positive integer | `500000` |
+| `MINIMAX_MAX_WEB_SEARCHES` | Maximum web searches per agent task; must be a non-negative integer | `10` |
+| `MINIMAX_TIMEOUT_MS` | Per-task deadline in milliseconds; must be a positive integer | `300000` (5min) |
+| `MINIMAX_BASH_WHITELIST` | Additional literal command prefixes, comma-separated; empty entries are ignored | — |
 | `MINIMAX_WORKING_DIR` | Base working directory for file operations; `minimax_agent_task` may only use this directory or a nested subdirectory | `process.cwd()` |
 | `MINIMAX_COST_LOG` | Cost log file path | `~/.claude/minimax-costs.log` |
 | `MINIMAX_USAGE_LOG` | Session usage log path | `~/.claude/minimax-usage.jsonl` |
@@ -302,11 +308,11 @@ Accepts three input types:
 - **Local file path**: Read from disk (supports `@` prefix)
 - **Base64 data URL**: Passed through directly
 
-Supported formats: JPEG, PNG, WebP (max 20MB).
+Supported formats: JPEG, PNG, WebP (max 20MB). Remote downloads have a 30-second deadline, validate the response MIME type and declared size before reading, and enforce the 20MB limit while streaming chunked responses.
 
 ## Features
 
-- **Max output**: 65,536 tokens per response (~10,000 Chinese characters / ~50K English words)
+- **Max output**: 8,192 tokens by default for compatibility across M2.5, M2.7, and M3
 - **Think tag stripping**: MiniMax `<think>...</think>` reasoning tags are automatically removed from all responses
 
 ## Security
@@ -314,13 +320,15 @@ Supported formats: JPEG, PNG, WebP (max 20MB).
 The agent loop runs with strict sandboxing:
 
 - **Bash whitelist**: Only `npm test`, `npx`, `node`, `tsc`, `eslint`, `pytest`, `go test`, `cargo test`, etc.
-- **Command chaining blocked**: `&&`, `;`, `|` operators are rejected
-- **Path isolation**: All file operations restricted to the working directory
+- **Command chaining blocked**: newlines plus `&&`, `;`, and `|` operators are rejected
+- **Path isolation**: All file operations are restricted to the working directory after resolving symbolic links
 - **Agent working-directory boundary**: `minimax_agent_task` can only operate inside `MINIMAX_WORKING_DIR` or one of its subdirectories
 - **Iteration cap**: 25 iterations max per task (configurable via `MINIMAX_MAX_ITERATIONS`)
-- **Timeout**: 5 minutes per task (configurable via `MINIMAX_TIMEOUT_MS`)
+- **Timeout**: The 5-minute task deadline is propagated to model requests and shell commands (configurable via `MINIMAX_TIMEOUT_MS`)
 - **Token budget**: 500K input tokens max per task (configurable via `MINIMAX_MAX_INPUT_TOKENS`)
 - **Web search budget**: 10 searches max per task (configurable via `MINIMAX_MAX_WEB_SEARCHES`)
+
+> The command whitelist is a safety boundary for the autonomous agent, not an OS sandbox. Allowed commands such as `npm run`, `npx`, and project-local Node scripts execute with the MCP process permissions. Use a container or low-privilege account for untrusted repositories.
 
 ## Cost
 
@@ -362,7 +370,7 @@ Output tokens: 7,228
 ## Testing
 
 ```bash
-# Run all tests (148 tests)
+# Run all tests (233 tests)
 npm test
 
 # Run with coverage report
@@ -393,6 +401,10 @@ src/
 │   ├── plan.ts             # minimax_plan
 │   ├── web-search.ts       # minimax_web_search
 │   ├── understand-image.ts # minimax_understand_image
+│   ├── tts.ts              # minimax_tts
+│   ├── generate-music.ts   # minimax_generate_music
+│   ├── generate-video.ts   # minimax_generate_video
+│   ├── media-shared.ts     # Shared media fetch, decode, and file helpers
 │   └── index.ts            # Tool registry
 ├── conversation/
 │   └── store.ts            # In-memory conversation store
@@ -400,6 +412,7 @@ src/
     ├── cost-tracker.ts     # Token usage and cost tracking (with session ID)
     ├── session-tracker.ts  # Cross-session usage tracking and trend analytics
     ├── file-writer.ts      # Safe file writing
+    ├── path-safety.ts      # Canonical path and symlink-boundary validation
     ├── image.ts            # Image to base64 data URL conversion
     ├── savings-calculator.ts # Token savings computation (self-adaptive)
     ├── failure-logger.ts   # Failure JSONL logging (scrubbing, fingerprints, monthly rotation)
@@ -413,6 +426,20 @@ logs/                       # Runtime JSONL files (gitignored)
 ```
 
 ## Changelog
+
+### v1.8.1 (2026-07-11)
+
+**Security, reliability, CLI packaging, and input validation**
+
+- **Path sandbox:** File and working-directory validation now resolves existing symbolic links and the nearest existing parent before allowing access, preventing symlink escapes outside `MINIMAX_WORKING_DIR`.
+- **Command sandbox:** Newline command separators are blocked. `MINIMAX_BASH_WHITELIST` is parsed as literal comma-separated command prefixes, and empty entries can no longer accidentally match every command.
+- **Deadlines and limits:** Numeric safety settings reject malformed, fractional, negative, or unsafe values. The agent propagates its remaining task deadline to model calls and shell commands; normal model requests have a 60-second network timeout.
+- **Atomic writes:** Generated and agent-written files use collision-resistant temporary names, atomic rename, and preserve the permissions of files they replace.
+- **Images and media:** Remote images enforce MIME type, `Content-Length`, a streaming 20MB ceiling, and a 30-second deadline. TTS/music reject malformed hex audio, while video validates model, resolution, duration, and poll interval before submission.
+- **Conversation consistency:** Unknown conversation IDs now fail explicitly, and failed chat requests no longer leave an unmatched user message in history.
+- **CLI and package entrypoints:** The published executable now has a Node shebang, routes argument-bearing invocations to the CLI, supports `--help` without an API key, and exposes valid `main` and `types` package paths.
+- **Cost logging:** Custom log directories are created automatically and writes are serialized without repeatedly copying the in-memory entry list.
+- **Tests:** 211 → **233**. Added regression coverage for sandbox escapes, deadlines, atomic permissions, chat consistency, media validation, CLI routing, and package configuration.
 
 ### v1.8.0 (2026-07-09)
 

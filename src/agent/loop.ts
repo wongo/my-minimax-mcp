@@ -1,5 +1,5 @@
 import { MiniMaxClient } from "../client/minimax-client.js";
-import type { ChatMessage, ModelId, TokenUsage } from "../client/types.js";
+import type { ChatMessage, ChatResponse, ModelId, TokenUsage } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
 import { AGENT_FUNCTIONS } from "./functions.js";
 import { FunctionExecutor } from "./executor.js";
@@ -134,10 +134,17 @@ export async function runAgentLoop(
   client: MiniMaxClient,
   options: AgentTaskOptions,
 ): Promise<AgentTaskResult> {
+  if (options.maxIterations !== undefined && (!Number.isSafeInteger(options.maxIterations) || options.maxIterations <= 0)) {
+    throw new Error(`maxIterations must be a positive integer; received ${String(options.maxIterations)}`);
+  }
+  if (options.maxInputTokens !== undefined && (!Number.isSafeInteger(options.maxInputTokens) || options.maxInputTokens <= 0)) {
+    throw new Error(`maxInputTokens must be a positive integer; received ${String(options.maxInputTokens)}`);
+  }
+
   const config: SafetyConfig = {
     ...getDefaultSafetyConfig(options.workingDirectory),
-    ...(options.maxIterations ? { maxIterations: options.maxIterations } : {}),
-    ...(options.maxInputTokens ? { maxInputTokens: options.maxInputTokens } : {}),
+    ...(options.maxIterations !== undefined ? { maxIterations: options.maxIterations } : {}),
+    ...(options.maxInputTokens !== undefined ? { maxInputTokens: options.maxInputTokens } : {}),
   };
 
   const executor = new FunctionExecutor(config, options.webSearch);
@@ -153,27 +160,35 @@ export async function runAgentLoop(
   ];
 
   const timeoutAt = Date.now() + config.timeoutMs;
+  const timeoutResult = (): AgentTaskResult => ({
+    success: false,
+    summary: `Timeout after ${iterations} iterations`,
+    filesChanged: Array.from(filesModified),
+    iterations,
+    tokensUsed: totalUsage,
+    cost: calculateCost(totalUsage, model),
+    reason: "timeout",
+  });
 
   while (iterations < config.maxIterations) {
-    if (Date.now() > timeoutAt) {
-      return {
-        success: false,
-        summary: `Timeout after ${iterations} iterations`,
-        filesChanged: Array.from(filesModified),
-        iterations,
-        tokensUsed: totalUsage,
-        cost: calculateCost(totalUsage, model),
-        reason: "timeout",
-      };
-    }
+    const requestTimeRemainingMs = timeoutAt - Date.now();
+    if (requestTimeRemainingMs <= 0) return timeoutResult();
 
-    const response = await client.chatWithTools(messages, {
-      model,
-      tools: AGENT_FUNCTIONS,
-      // M3 caps at 8192 (error 2013 otherwise). The client has the same
-      // default; lower here to avoid the agent path overriding it.
-      maxTokens: 8192,
-    });
+    let response: ChatResponse;
+    try {
+      response = await client.chatWithTools(messages, {
+        model,
+        tools: AGENT_FUNCTIONS,
+        // M3 caps at 8192 (error 2013 otherwise). The client has the same
+        // default; lower here to avoid the agent path overriding it.
+        maxTokens: 8192,
+        timeoutMs: requestTimeRemainingMs,
+      });
+    } catch (err) {
+      const errorName = err instanceof Error ? err.name : "";
+      if (Date.now() >= timeoutAt || /timeout/i.test(errorName)) return timeoutResult();
+      throw err;
+    }
 
     totalUsage.inputTokens += response.usage.inputTokens;
     totalUsage.outputTokens += response.usage.outputTokens;
@@ -244,7 +259,9 @@ export async function runAgentLoop(
       let result: string;
       try {
         const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
-        result = await executor.execute(toolCall.function.name, args);
+        const toolTimeRemainingMs = timeoutAt - Date.now();
+        if (toolTimeRemainingMs <= 0) return timeoutResult();
+        result = await executor.execute(toolCall.function.name, args, toolTimeRemainingMs);
 
         // Track recent actions (last 3)
         if (stepDesc) {

@@ -5,8 +5,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { MiniMaxClient } from "./client/minimax-client.js";
-import type { ModelId } from "./client/types.js";
-import { calculateCost } from "./client/types.js";
+import { MODEL_IDS, calculateCost, isModelId, type ModelId } from "./client/types.js";
 import { CostTracker } from "./utils/cost-tracker.js";
 import { SessionTracker } from "./utils/session-tracker.js";
 import { calculateCumulativeReport, calculateSavings } from "./utils/savings-calculator.js";
@@ -15,6 +14,11 @@ import { runAgentLoop } from "./agent/loop.js";
 const __cliDirname = dirname(fileURLToPath(import.meta.url));
 
 // Route to sub-command before requiring API key
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  printHelp();
+  process.exit(0);
+}
+
 if (process.argv.includes("--init")) {
   runInit();
   process.exit(0);
@@ -62,7 +66,13 @@ function parseArgs(argv: string[]): {
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--mode":
-        mode = args[++i] as "chat" | "generate" | "agent";
+        {
+          const value = args[++i];
+          if (value !== "chat" && value !== "generate" && value !== "agent") {
+            throw new Error(`Unsupported mode: ${String(value)}. Expected chat, generate, or agent.`);
+          }
+          mode = value;
+        }
         break;
       case "--task":
       case "-t":
@@ -70,7 +80,13 @@ function parseArgs(argv: string[]): {
         break;
       case "--model":
       case "-m":
-        model = args[++i] as ModelId;
+        {
+          const value = args[++i];
+          if (!value || !isModelId(value)) {
+            throw new Error(`Unsupported model: ${String(value)}. Supported models: ${MODEL_IDS.join(", ")}`);
+          }
+          model = value;
+        }
         break;
       case "--language":
       case "-l":
@@ -113,7 +129,7 @@ Usage:
 Options:
   --task, -t       Task description (required for generate/chat/agent)
   --mode           Mode: generate | chat | agent (default: generate)
-  --model, -m      Model: MiniMax-M2.5 | MiniMax-M2.7 | MiniMax-M3 (default: MiniMax-M2.7)
+  --model, -m      Model ID, including highspeed variants (default: MiniMax-M2.7)
   --language, -l   Language for code generation (default: typescript)
   --dir, -d        Working directory for agent mode (default: cwd)
   --init           Set up Self-Improvement Loop (CLAUDE.md template + usage log)

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatMessage, ChatOptions, ChatResponse, ChatWithToolsOptions, ModelId, TokenUsage } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://api.minimax.io/v1";
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 // M3 max output is 8192, M2.7 supports more. 65536 was rejected by M3
 // with error 2013 ("invalid params"). Use a conservatively high default
 // that works across all models; callers can pass maxTokens to override.
@@ -21,6 +22,7 @@ export class MiniMaxClient {
     this.client = new OpenAI({
       apiKey,
       baseURL: DEFAULT_BASE_URL,
+      timeout: DEFAULT_REQUEST_TIMEOUT_MS,
     });
     this.defaultModel = defaultModel;
   }
@@ -38,7 +40,7 @@ export class MiniMaxClient {
       temperature: options.temperature ?? 0.7,
       max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
       ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
-    });
+    }, options.timeoutMs !== undefined ? { timeout: options.timeoutMs, maxRetries: 0 } : undefined);
 
     const choice = response.choices[0];
     return {
@@ -67,7 +69,7 @@ export class MiniMaxClient {
       tools,
       temperature: options.temperature ?? 0.7,
       max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
-    });
+    }, options.timeoutMs !== undefined ? { timeout: options.timeoutMs, maxRetries: 0 } : undefined);
 
     const choice = response.choices[0];
     const toolCalls = (choice?.message?.tool_calls ?? [])

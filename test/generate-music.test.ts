@@ -120,3 +120,19 @@ test("generateMusic: rejects when audio field is empty", async (t) => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("generateMusic: rejects malformed hex audio", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    makeJsonResponse({ data: { audio: "not-hex" }, base_resp: { status_code: 0 } });
+
+  try {
+    const tracker = new CostTracker(join(tmpdir(), "music-costs.log"));
+    await assert.rejects(
+      () => generateMusic(API_KEY, tracker, { prompt: "lofi" }),
+      /malformed hex audio/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

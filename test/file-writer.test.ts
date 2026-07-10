@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { safeWriteFile } from "../src/utils/file-writer.ts";
@@ -44,4 +44,29 @@ test("safeWriteFile error message includes workingDirectory and 'relative' hint"
 
   assert.match(errorMessage, /relative/i);
   assert.ok(errorMessage.includes(workingDirectory), `Error message should include workingDirectory path. Got: ${errorMessage}`);
+});
+
+test("safeWriteFile rejects a symlinked parent that points outside the working directory", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-file-writer-"));
+  const outsideDirectory = await mkdtemp(join(tmpdir(), "minimax-file-writer-outside-"));
+  await symlink(outsideDirectory, join(workingDirectory, "escape"), "dir");
+
+  await assert.rejects(
+    () => safeWriteFile("escape/output.txt", "nope", workingDirectory),
+    /Path escapes working directory/,
+  );
+});
+
+test("safeWriteFile atomically replaces content while preserving file permissions", async () => {
+  if (process.platform === "win32") return;
+
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-file-writer-"));
+  const filePath = join(workingDirectory, "script.sh");
+  await writeFile(filePath, "old\n");
+  await chmod(filePath, 0o751);
+
+  await safeWriteFile("script.sh", "new\n", workingDirectory);
+
+  assert.equal(await readFile(filePath, "utf-8"), "new\n");
+  assert.equal((await stat(filePath)).mode & 0o777, 0o751);
 });

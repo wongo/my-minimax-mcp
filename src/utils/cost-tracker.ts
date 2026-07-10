@@ -1,6 +1,6 @@
-import { appendFile } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { TokenUsage, ModelId } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
 import { calculateSavings, type SavingsReport } from "./savings-calculator.js";
@@ -19,6 +19,7 @@ export class CostTracker {
   private readonly logPath: string;
   readonly sessionId: string;
   private projectCounts: Map<string, number> = new Map();
+  private logWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(logPath?: string, sessionId?: string) {
     this.logPath = logPath ?? resolve(homedir(), ".claude", "minimax-costs.log");
@@ -48,11 +49,11 @@ export class CostTracker {
       tokensUsed: usage,
       cost,
     };
-    this.entries = [...this.entries, entry];
+    this.entries.push(entry);
 
     // Append to log file (fire and forget, don't block on write errors)
     const line = JSON.stringify(entry) + "\n";
-    appendFile(this.logPath, line, "utf-8").catch(() => {});
+    this.appendToLog(line);
   }
 
   getReport(): {
@@ -89,13 +90,22 @@ export class CostTracker {
       tokensUsed: { inputTokens: 0, outputTokens: 0 },
       cost: 0,
     };
-    this.entries = [...this.entries, entry];
+    this.entries.push(entry);
 
     const line = JSON.stringify(entry) + "\n";
-    appendFile(this.logPath, line, "utf-8").catch(() => {});
+    this.appendToLog(line);
   }
 
   reset(): void {
     this.entries = [];
+  }
+
+  private appendToLog(line: string): void {
+    this.logWriteQueue = this.logWriteQueue
+      .then(async () => {
+        await mkdir(dirname(this.logPath), { recursive: true });
+        await appendFile(this.logPath, line, "utf-8");
+      })
+      .catch(() => {});
   }
 }

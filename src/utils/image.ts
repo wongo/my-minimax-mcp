@@ -3,6 +3,7 @@ import { extname } from "node:path";
 
 const MAX_SIZE = 20 * 1024 * 1024;
 const SUPPORTED_MIMES = ["image/jpeg", "image/png", "image/webp"];
+const IMAGE_FETCH_TIMEOUT_MS = 30_000;
 
 export function detectMimeType(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
@@ -36,23 +37,31 @@ export async function toBase64DataUrl(input: string): Promise<string> {
   }
 
   if (input.startsWith("http://") || input.startsWith("https://")) {
-    const response = await fetch(input);
+    let response: Response;
+    try {
+      response = await fetch(input, { signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS) });
+    } catch (err) {
+      if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+        throw new Error(`Image fetch timed out after ${IMAGE_FETCH_TIMEOUT_MS / 1000}s`);
+      }
+      throw err;
+    }
     if (!response.ok) {
       throw new Error(`Failed to fetch image: HTTP ${response.status}`);
     }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    if (buffer.length > MAX_SIZE) {
-      throw new Error("Image exceeds 20MB limit");
-    }
 
     const contentType = response.headers.get("Content-Type") ?? "";
-    const mimeType = SUPPORTED_MIMES.find((t) => contentType.includes(t));
-    if (!mimeType) {
+    const mimeType = contentType.split(";", 1)[0].trim().toLowerCase();
+    if (!SUPPORTED_MIMES.includes(mimeType)) {
       throw new Error(`Unsupported image Content-Type: ${contentType || "missing"}. Supported: JPEG, PNG, WebP`);
     }
 
+    const contentLength = response.headers.get("Content-Length");
+    if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_SIZE) {
+      throw new Error("Image exceeds 20MB limit");
+    }
+
+    const buffer = await readResponseWithLimit(response);
     const base64 = buffer.toString("base64");
     return `data:${mimeType};base64,${base64}`;
   }
@@ -69,4 +78,35 @@ export async function toBase64DataUrl(input: string): Promise<string> {
   const mimeType = detectMimeType(filePath);
   const base64 = buffer.toString("base64");
   return `data:${mimeType};base64,${base64}`;
+}
+
+async function readResponseWithLimit(response: Response): Promise<Buffer> {
+  if (!response.body) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > MAX_SIZE) throw new Error("Image exceeds 20MB limit");
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_SIZE) {
+        await reader.cancel().catch(() => {});
+        throw new Error("Image exceeds 20MB limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks, totalBytes);
 }

@@ -1,4 +1,5 @@
-import { resolve, relative } from "node:path";
+import { resolve } from "node:path";
+import { resolvePathWithinRoot } from "../utils/path-safety.js";
 
 const DEFAULT_BASH_WHITELIST: RegExp[] = [
   /^npm (test|run|exec|ci)\b/,
@@ -50,36 +51,42 @@ export interface SafetyConfig {
 
 export function getDefaultSafetyConfig(workingDirectory: string): SafetyConfig {
   return {
-    maxIterations: parseInt(process.env.MINIMAX_MAX_ITERATIONS ?? "25", 10),
-    maxInputTokens: parseInt(process.env.MINIMAX_MAX_INPUT_TOKENS ?? "500000", 10),
-    timeoutMs: parseInt(process.env.MINIMAX_TIMEOUT_MS ?? "300000", 10),
+    maxIterations: parseIntegerEnv("MINIMAX_MAX_ITERATIONS", 25, 1),
+    maxInputTokens: parseIntegerEnv("MINIMAX_MAX_INPUT_TOKENS", 500_000, 1),
+    timeoutMs: parseIntegerEnv("MINIMAX_TIMEOUT_MS", 300_000, 1),
     workingDirectory: resolve(workingDirectory),
     additionalBashWhitelist: parseAdditionalWhitelist(process.env.MINIMAX_BASH_WHITELIST),
-    maxWebSearches: parseInt(process.env.MINIMAX_MAX_WEB_SEARCHES ?? "10", 10),
+    maxWebSearches: parseIntegerEnv("MINIMAX_MAX_WEB_SEARCHES", 10, 0),
   };
+}
+
+function parseIntegerEnv(name: string, fallback: number, minimum: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+
+  const trimmed = raw.trim();
+  const value = Number(trimmed);
+  if (!/^\d+$/.test(trimmed) || !Number.isSafeInteger(value) || value < minimum) {
+    throw new Error(`${name} must be a safe integer greater than or equal to ${minimum}; received ${JSON.stringify(raw)}`);
+  }
+  return value;
 }
 
 function parseAdditionalWhitelist(envValue: string | undefined): RegExp[] {
   if (!envValue) return [];
-  return envValue.split(",").map(p => new RegExp(`^${p.trim()}`));
+  return envValue
+    .split(",")
+    .map((pattern) => pattern.trim())
+    .filter(Boolean)
+    .map((pattern) => new RegExp(`^${escapeRegExp(pattern)}(?:\\s|$)`));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function validateFilePath(filePath: string, workingDirectory: string): string {
-  const resolved = resolve(workingDirectory, filePath);
-  const rel = relative(workingDirectory, resolved);
-
-  // Block traversal via ".." prefix
-  if (rel.startsWith("..")) {
-    throw new Error(`Path escapes working directory: ${filePath}`);
-  }
-
-  // Block absolute paths that don't share the working directory prefix
-  // (handles Windows cross-drive paths where relative() returns an absolute path)
-  if (!resolved.startsWith(resolve(workingDirectory) + "/") && resolved !== resolve(workingDirectory)) {
-    throw new Error(`Path escapes working directory: ${filePath}`);
-  }
-
-  return resolved;
+  return resolvePathWithinRoot(filePath, workingDirectory);
 }
 
 export function resolveWorkingDirectory(
@@ -95,7 +102,7 @@ export function resolveWorkingDirectory(
 
 // Shell operators that allow command chaining — must be rejected
 // before whitelist check to prevent "npm test && curl evil.com"
-const SHELL_CHAIN_OPERATORS = /[;&|]|&&|\|\|/;
+const SHELL_CHAIN_OPERATORS = /[\r\n;&|]/;
 
 export function validateBashCommand(command: string, config: SafetyConfig): void {
   const trimmed = command.trim();

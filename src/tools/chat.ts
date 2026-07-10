@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MiniMaxClient } from "../client/minimax-client.js";
-import type { ModelId } from "../client/types.js";
+import type { ChatMessage, ChatResponse, ModelId } from "../client/types.js";
 import { calculateCost } from "../client/types.js";
 import { ConversationStore } from "../conversation/store.js";
 import { CostTracker } from "../utils/cost-tracker.js";
@@ -27,35 +27,49 @@ export async function chat(
   const model = input.model ?? client.getDefaultModel();
 
   let conversationId: string;
-  if (input.conversationId && conversationStore.has(input.conversationId)) {
+  let createdConversation = false;
+  if (input.conversationId) {
+    if (!conversationStore.has(input.conversationId)) {
+      throw new Error(`Conversation not found: ${input.conversationId}`);
+    }
     conversationId = input.conversationId;
   } else {
     conversationId = conversationStore.create(input.systemPrompt ?? "You are a helpful AI assistant.");
+    createdConversation = true;
   }
 
-  conversationStore.append(conversationId, "user", input.message);
-  const messages = conversationStore.getMessages(conversationId);
+  const messages: ChatMessage[] = [
+    ...conversationStore.getMessages(conversationId),
+    { role: "user", content: input.message },
+  ];
 
-  const response = await withRetry(
-    () => client.chat(messages, { model }),
-    {
-      onAttempt: telemetry
-        ? async ({ attempt, succeeded, error }) => {
-            if (!succeeded) {
-              await telemetry.recordRetry({
-                tool: "minimax_chat",
-                attempt,
-                succeeded,
-                errorCategory: error !== undefined ? classifyError(error) : undefined,
-                errorMessage: error instanceof Error ? error.message.slice(0, 200) : undefined,
-              });
+  let response: ChatResponse;
+  try {
+    response = await withRetry(
+      () => client.chat(messages, { model }),
+      {
+        onAttempt: telemetry
+          ? async ({ attempt, succeeded, error }) => {
+              if (!succeeded) {
+                await telemetry.recordRetry({
+                  tool: "minimax_chat",
+                  attempt,
+                  succeeded,
+                  errorCategory: error !== undefined ? classifyError(error) : undefined,
+                  errorMessage: error instanceof Error ? error.message.slice(0, 200) : undefined,
+                });
+              }
             }
-          }
-        : undefined,
-    },
-  );
+          : undefined,
+      },
+    );
+  } catch (err) {
+    if (createdConversation) conversationStore.clear(conversationId);
+    throw err;
+  }
 
   const reply = response.content ?? "";
+  conversationStore.append(conversationId, "user", input.message);
   conversationStore.append(conversationId, "assistant", reply);
   await costTracker.record("chat", model, response.usage);
 
