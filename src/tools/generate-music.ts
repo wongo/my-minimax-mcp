@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CostTracker } from "../utils/cost-tracker.js";
 import type { Telemetry } from "../utils/telemetry.js";
-import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, assertBaseResp, fetchWithTimeout, writeMediaFile } from "./media-shared.js";
+import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, assertBaseResp, decodeHexAudio, fetchWithTimeout, writeMediaFile } from "./media-shared.js";
 
 export const generateMusicSchema = z
   .object({
@@ -105,12 +105,7 @@ export async function generateMusic(
   }
 
   // ── Decode hex → Buffer ─────────────────────────────────────────────────────
-  let audioBuffer: Buffer;
-  try {
-    audioBuffer = Buffer.from(hexAudio, "hex");
-  } catch {
-    throw new Error("Music generation returned malformed hex audio");
-  }
+  const audioBuffer = decodeHexAudio(hexAudio, "Music generation");
 
   if (audioBuffer.length === 0) {
     throw new Error("Music generation returned empty audio");

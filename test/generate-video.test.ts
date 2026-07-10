@@ -197,3 +197,24 @@ test("generateVideo: rejects when retrieve has no download_url", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("generateVideo: rejects an invalid poll interval before submitting a task", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls++;
+    return makeJsonResponse({ task_id: "should-not-exist" });
+  }) as typeof globalThis.fetch;
+  process.env[POLL_ENV_KEY] = "invalid";
+
+  try {
+    await assert.rejects(
+      () => generateVideo(API_KEY, newTracker(), { prompt: "test" }),
+      /MINIMAX_MEDIA_POLL_MS must be a positive integer/,
+    );
+    assert.equal(fetchCalls, 0);
+  } finally {
+    process.env[POLL_ENV_KEY] = "1";
+    globalThis.fetch = originalFetch;
+  }
+});

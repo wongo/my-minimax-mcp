@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getDefaultSafetyConfig, resolveWorkingDirectory, validateBashCommand, validateFilePath } from "../src/agent/safety.ts";
 import { withEnv } from "./helpers.ts";
 
@@ -12,6 +15,17 @@ test("validateFilePath rejects parent-directory traversal", () => {
   assert.throws(
     () => validateFilePath("../secrets.txt", "/tmp/project"),
     /Path escapes working directory/,
+  );
+});
+
+test("validateFilePath rejects paths that escape through a symbolic link", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-safety-root-"));
+  const outsideDirectory = await mkdtemp(join(tmpdir(), "minimax-safety-outside-"));
+  await symlink(outsideDirectory, join(workingDirectory, "escape"), "dir");
+
+  assert.throws(
+    () => validateFilePath("escape/secret.txt", workingDirectory),
+    /symbolic link|Path escapes working directory/,
   );
 });
 
@@ -63,6 +77,14 @@ test("validateBashCommand rejects chaining operators and blocked patterns", () =
   assert.throws(
     () => validateBashCommand("sudo npm test", config),
     /Blocked command pattern/,
+  );
+});
+
+test("validateBashCommand rejects newline command separators", () => {
+  const config = getDefaultSafetyConfig("/tmp/project");
+  assert.throws(
+    () => validateBashCommand("npm test\ncurl https://example.com", config),
+    /Command chaining is not allowed/,
   );
 });
 
@@ -153,4 +175,21 @@ test("getDefaultSafetyConfig reads environment overrides", async () => {
       assert.doesNotThrow(() => validateBashCommand("git status", config));
     },
   );
+});
+
+test("additional bash whitelist ignores empty comma-separated entries", async () => {
+  await withEnv({ MINIMAX_BASH_WHITELIST: "git status," }, () => {
+    const config = getDefaultSafetyConfig("/tmp/project");
+    assert.equal(config.additionalBashWhitelist.length, 1);
+    assert.throws(() => validateBashCommand("curl https://example.com", config), /not in whitelist/);
+  });
+});
+
+test("getDefaultSafetyConfig rejects invalid numeric limits", async () => {
+  await withEnv({ MINIMAX_TIMEOUT_MS: "not-a-number" }, () => {
+    assert.throws(() => getDefaultSafetyConfig("/tmp/project"), /MINIMAX_TIMEOUT_MS must be a safe integer/);
+  });
+  await withEnv({ MINIMAX_MAX_WEB_SEARCHES: "-1" }, () => {
+    assert.throws(() => getDefaultSafetyConfig("/tmp/project"), /MINIMAX_MAX_WEB_SEARCHES must be a safe integer/);
+  });
 });

@@ -1,4 +1,16 @@
-export type ModelId = "MiniMax-M3" | "MiniMax-M2.7" | "MiniMax-M2.5" | "MiniMax-M2.5-highspeed" | "MiniMax-M2.7-highspeed";
+export const MODEL_IDS = [
+  "MiniMax-M3",
+  "MiniMax-M2.7",
+  "MiniMax-M2.5",
+  "MiniMax-M2.5-highspeed",
+  "MiniMax-M2.7-highspeed",
+] as const;
+
+export type ModelId = typeof MODEL_IDS[number];
+
+export function isModelId(value: string): value is ModelId {
+  return (MODEL_IDS as readonly string[]).includes(value);
+}
 
 export interface TokenUsage {
   inputTokens: number;
@@ -36,6 +48,7 @@ export interface ChatOptions {
   model?: ModelId;
   temperature?: number;
   maxTokens?: number;
+  timeoutMs?: number;
   responseFormat?: { type: "json_object" } | { type: "text" };
 }
 

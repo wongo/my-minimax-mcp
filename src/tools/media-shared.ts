@@ -66,6 +66,13 @@ export async function downloadToFile(url: string, outputFile: string): Promise<n
   return writeMediaFile(outputFile, Buffer.from(arrayBuffer));
 }
 
+export function decodeHexAudio(hexAudio: string, context: string): Buffer {
+  if (hexAudio.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hexAudio)) {
+    throw new Error(`${context} returned malformed hex audio`);
+  }
+  return Buffer.from(hexAudio, "hex");
+}
+
 export function assertBaseResp(
   json: unknown,
   context: string,

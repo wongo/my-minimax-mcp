@@ -5,9 +5,9 @@ import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, sleep, downloadToFile, assertBaseResp
 
 export const generateVideoSchema = z.object({
   prompt: z.string().describe("Text description of the video to generate"),
-  duration: z.number().optional().describe("Video duration in seconds: 6 or 10 (default: 6)"),
-  resolution: z.string().optional().describe("Resolution: '768P' or '1080P' (default: '1080P')"),
-  model: z.string().optional().describe("Model: 'MiniMax-Hailuo-2.3' or 'MiniMax-Hailuo-2.3-Fast' (default: 'MiniMax-Hailuo-2.3')"),
+  duration: z.union([z.literal(6), z.literal(10)]).optional().describe("Video duration in seconds: 6 or 10 (default: 6)"),
+  resolution: z.enum(["768P", "1080P"]).optional().describe("Resolution: '768P' or '1080P' (default: '1080P')"),
+  model: z.enum(["MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2.3-Fast"]).optional().describe("Video generation model (default: 'MiniMax-Hailuo-2.3')"),
   outputFile: z.string().optional().describe("Absolute file path to save the video (mp4)"),
 });
 
@@ -39,9 +39,14 @@ export async function generateVideo(
   input: GenerateVideoInput,
   _telemetry?: Telemetry,
 ): Promise<string> {
+  input = generateVideoSchema.parse(input);
   const model = input.model ?? "MiniMax-Hailuo-2.3";
   const duration = input.duration ?? 6;
   const resolution = input.resolution ?? "1080P";
+  const pollIntervalMs = Number(process.env.MINIMAX_MEDIA_POLL_MS ?? 10_000); // overridable for tests
+  if (!Number.isSafeInteger(pollIntervalMs) || pollIntervalMs <= 0) {
+    throw new Error(`MINIMAX_MEDIA_POLL_MS must be a positive integer; received ${JSON.stringify(process.env.MINIMAX_MEDIA_POLL_MS)}`);
+  }
 
   // ── Step 1: Submit ──────────────────────────────────────────────────────────
   const submitResponse = await fetchWithTimeout(`${MEDIA_BASE_URL}/video_generation`, {
@@ -74,7 +79,6 @@ export async function generateVideo(
   }
 
   // ── Step 2: Poll for completion ─────────────────────────────────────────────
-  const pollIntervalMs = Number(process.env.MINIMAX_MEDIA_POLL_MS ?? 10_000); // overridable for tests
   const maxPolls = 30; // 30 × 10 s = 5 min at the default interval
   let fileId: string | undefined;
 

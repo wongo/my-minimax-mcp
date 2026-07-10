@@ -52,3 +52,14 @@ test("CostTracker reset clears accumulated report state", async () => {
   });
   assert.deepEqual(report.breakdown, []);
 });
+
+test("CostTracker creates parent directories for a custom log path", async () => {
+  const tempDirectory = await mkdtemp(join(tmpdir(), "minimax-cost-tracker-"));
+  const logPath = join(tempDirectory, "nested", "logs", "costs.log");
+  const tracker = new CostTracker(logPath);
+
+  await tracker.recordUnmetered("web_search");
+
+  const logLines = await waitForFileLines(logPath, 1);
+  assert.equal(logLines.length, 1);
+});

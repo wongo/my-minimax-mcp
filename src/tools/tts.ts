@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CostTracker } from "../utils/cost-tracker.js";
 import type { Telemetry } from "../utils/telemetry.js";
-import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, fetchWithTimeout, writeMediaFile } from "./media-shared.js";
+import { MEDIA_BASE_URL, MEDIA_TIMEOUT_MS, decodeHexAudio, fetchWithTimeout, writeMediaFile } from "./media-shared.js";
 
 export const ttsSchema = z.object({
   text: z.string().describe("Text to convert to speech"),
@@ -68,7 +68,8 @@ export async function tts(
     }
     const data = (json as TtsJsonResponse).data;
     const hexAudio = data?.audio ?? "";
-    audioBuffer = Buffer.from(hexAudio, "hex");
+    if (!hexAudio) throw new Error("TTS returned empty audio");
+    audioBuffer = decodeHexAudio(hexAudio, "TTS");
   } else {
     // Direct binary audio response
     const arrayBuffer = await response.arrayBuffer();

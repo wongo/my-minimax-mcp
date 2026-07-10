@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildIterationLimitDiagnostics, buildTokenBudgetDiagnostics, type AgentTaskOptions } from "../src/agent/loop.js";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildIterationLimitDiagnostics, buildTokenBudgetDiagnostics, runAgentLoop, type AgentTaskOptions } from "../src/agent/loop.js";
 import { getDefaultSafetyConfig } from "../src/agent/safety.js";
+import type { ChatMessage, ChatWithToolsOptions } from "../src/client/types.js";
+import type { MiniMaxClient } from "../src/client/minimax-client.js";
 
 // ─── stillProgressing=true ────────────────────────────────────────────────────
 
@@ -134,4 +139,38 @@ test("maxInputTokens override in AgentTaskOptions passes through to SafetyConfig
     ...(options.maxInputTokens ? { maxInputTokens: options.maxInputTokens } : {}),
   };
   assert.equal(config.maxInputTokens, 1000000);
+});
+
+test("runAgentLoop converts a request deadline into a timeout result", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-agent-timeout-"));
+  let observedTimeout: number | undefined;
+  const client = {
+    getDefaultModel: () => "MiniMax-M2.7",
+    chatWithTools: async (_messages: ChatMessage[], options: ChatWithToolsOptions) => {
+      observedTimeout = options.timeoutMs;
+      const error = new Error("request deadline exceeded");
+      error.name = "TimeoutError";
+      throw error;
+    },
+  } as unknown as MiniMaxClient;
+
+  const result = await runAgentLoop(client, { task: "test", workingDirectory });
+
+  assert.equal(result.reason, "timeout");
+  assert.equal(result.iterations, 0);
+  assert.ok(observedTimeout !== undefined && observedTimeout > 0);
+});
+
+test("runAgentLoop rejects invalid programmatic limits", async () => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "minimax-agent-limits-"));
+  const client = { getDefaultModel: () => "MiniMax-M2.7" } as unknown as MiniMaxClient;
+
+  await assert.rejects(
+    () => runAgentLoop(client, { task: "test", workingDirectory, maxIterations: 1.5 }),
+    /maxIterations must be a positive integer/,
+  );
+  await assert.rejects(
+    () => runAgentLoop(client, { task: "test", workingDirectory, maxInputTokens: 0 }),
+    /maxInputTokens must be a positive integer/,
+  );
 });

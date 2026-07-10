@@ -1,4 +1,5 @@
-import { readFile, writeFile, mkdir, readdir, rename, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rename, stat, unlink } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join, relative, basename } from "node:path";
@@ -25,7 +26,7 @@ export class FunctionExecutor {
     private webSearch?: (query: string) => Promise<string>,
   ) {}
 
-  async execute(functionName: string, args: Record<string, unknown>): Promise<string> {
+  async execute(functionName: string, args: Record<string, unknown>, remainingTimeMs?: number): Promise<string> {
     switch (functionName) {
       case "web_search":
         return this.webSearchTool(args.query as string);
@@ -41,7 +42,7 @@ export class FunctionExecutor {
           args.edits as Array<{ old_string: string; new_string: string }>,
         );
       case "run_bash":
-        return this.runBash(args.command as string, args.timeout_ms as number | undefined);
+        return this.runBash(args.command as string, args.timeout_ms as number | undefined, remainingTimeMs);
       case "list_files":
         return this.listFiles(args.pattern as string);
       case "search_content":
@@ -99,9 +100,16 @@ export class FunctionExecutor {
     return `File edited (batch, ${edits.length} changes): ${path}`;
   }
 
-  private async runBash(command: string, timeoutMs?: number): Promise<string> {
+  private async runBash(command: string, timeoutMs?: number, remainingTimeMs?: number): Promise<string> {
     validateBashCommand(command, this.config);
-    const timeout = timeoutMs ?? 30_000;
+    const requestedTimeout = timeoutMs ?? 30_000;
+    if (!Number.isSafeInteger(requestedTimeout) || requestedTimeout <= 0) {
+      throw new Error(`run_bash timeout_ms must be a positive integer; received ${String(timeoutMs)}`);
+    }
+    const remainingCap = remainingTimeMs === undefined
+      ? this.config.timeoutMs
+      : Math.max(1, Math.floor(remainingTimeMs));
+    const timeout = Math.min(requestedTimeout, this.config.timeoutMs, remainingCap);
     try {
       const { stdout, stderr } = await execFileAsync("sh", ["-c", command], {
         cwd: this.config.workingDirectory,
@@ -201,9 +209,18 @@ export class FunctionExecutor {
 async function atomicWrite(targetPath: string, content: string): Promise<void> {
   const dir = dirname(targetPath);
   const base = basename(targetPath);
-  const tmpPath = join(dir, `.${base}.${process.pid}.${Date.now()}.tmp`);
+  const tmpPath = join(dir, `.${base}.${randomUUID()}.tmp`);
+  let mode: number | undefined;
   try {
-    await writeFile(tmpPath, content, "utf-8");
+    mode = (await stat(targetPath)).mode & 0o777;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  try {
+    await writeFile(tmpPath, content, {
+      encoding: "utf-8",
+      ...(mode !== undefined ? { mode } : {}),
+    });
     await rename(tmpPath, targetPath);
   } catch (err) {
     try { await unlink(tmpPath); } catch {}

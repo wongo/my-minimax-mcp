@@ -88,6 +88,22 @@ test("tts: rejects when audio field is empty", async () => {
   }
 });
 
+test("tts: rejects malformed hex audio", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    makeJsonResponse({ data: { audio: "abc" }, base_resp: { status_code: 0 } });
+
+  try {
+    const tracker = new CostTracker(join(tmpdir(), "tts-costs.log"));
+    await assert.rejects(
+      () => tts(API_KEY, tracker, { text: "hello" }),
+      /malformed hex audio/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("tts: rejects on HTTP error (status 500)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => makeJsonResponse({ base_resp: { status_code: 0 } }, 500);

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
@@ -9,7 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { MiniMaxClient } from "./client/minimax-client.js";
 import { CodingPlanClient } from "./client/coding-plan-client.js";
-import type { ModelId } from "./client/types.js";
+import { MODEL_IDS, isModelId } from "./client/types.js";
 import { ConversationStore } from "./conversation/store.js";
 import { CostTracker } from "./utils/cost-tracker.js";
 import { SessionTracker } from "./utils/session-tracker.js";
@@ -25,6 +26,8 @@ import { generateVideo } from "./tools/generate-video.js";
 import { resolveWorkingDirectory } from "./agent/safety.js";
 import { FailureLogger } from "./utils/failure-logger.js";
 import { Telemetry } from "./utils/telemetry.js";
+
+const modelSchema = z.enum(MODEL_IDS);
 
 export function loadEnvFile(envPath = process.env.DOTENV_CONFIG_PATH ?? resolve(__dirname, "..", ".env")): void {
   try {
@@ -55,7 +58,11 @@ export function createServer(
     throw new Error("MINIMAX_API_KEY environment variable is required");
   }
 
-  const defaultModel = (env.MINIMAX_DEFAULT_MODEL ?? "MiniMax-M2.7") as ModelId;
+  const configuredModel = env.MINIMAX_DEFAULT_MODEL ?? "MiniMax-M2.7";
+  if (!isModelId(configuredModel)) {
+    throw new Error(`Unsupported MINIMAX_DEFAULT_MODEL: ${configuredModel}. Supported models: ${MODEL_IDS.join(", ")}`);
+  }
+  const defaultModel = configuredModel;
   const costLogPath = env.MINIMAX_COST_LOG || undefined;
   const workingDirectory = env.MINIMAX_WORKING_DIR || process.cwd();
 
@@ -83,16 +90,17 @@ export function createServer(
       language: z.string().describe("Programming language (e.g., typescript, python, go)"),
       filePath: z.string().optional().describe("If provided, write generated code to this file path"),
       workingDirectory: z.string().optional().describe("Absolute path to the project directory for file operations. Defaults to server base directory. Example: '/home/nickw/Projects/taiwan-in-japan-portal'"),
-      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: modelSchema.optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       context: z.string().optional().describe("Additional context about the codebase or requirements"),
     },
     async (input) => {
       const start = Date.now();
-      const effectiveWorkingDir = input.workingDirectory
-        ? resolveWorkingDirectory(input.workingDirectory, workingDirectory)
-        : workingDirectory;
-      costTracker.notifyProject(effectiveWorkingDir);
+      let effectiveWorkingDir: string | undefined;
       try {
+        effectiveWorkingDir = input.workingDirectory
+          ? resolveWorkingDirectory(input.workingDirectory, workingDirectory)
+          : workingDirectory;
+        costTracker.notifyProject(effectiveWorkingDir);
         const result = await generateCode(client, costTracker, effectiveWorkingDir, input, telemetry);
         await telemetry.recordSuccess({
           tool: "minimax_generate_code",
@@ -106,7 +114,7 @@ export function createServer(
           tool: "minimax_generate_code",
           error: err,
           toolInput: input,
-          workingDirectory: effectiveWorkingDir,
+          workingDirectory: effectiveWorkingDir ?? input.workingDirectory ?? workingDirectory,
           model: input.model ?? defaultModel,
         });
         return { content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
@@ -121,9 +129,9 @@ export function createServer(
       inputSchema: {
         task: z.string().describe("Full description of the task for the agent to complete"),
         workingDirectory: z.string().describe("Absolute path to the working directory for file operations"),
-        model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
-        maxIterations: z.number().optional().describe("Maximum agent loop iterations (default: 25)"),
-        maxInputTokens: z.number().optional().describe("Maximum input tokens per task (default: 500000, override for large tasks)"),
+        model: modelSchema.optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+        maxIterations: z.number().int().positive().optional().describe("Maximum agent loop iterations (default: 25)"),
+        maxInputTokens: z.number().int().positive().optional().describe("Maximum input tokens per task (default: 500000, override for large tasks)"),
         systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
       },
     },
@@ -224,7 +232,7 @@ export function createServer(
     {
       message: z.string().describe("Message to send to MiniMax"),
       conversationId: z.string().optional().describe("ID of existing conversation to continue"),
-      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: modelSchema.optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
       systemPrompt: z.string().optional().describe("System prompt (only for new conversations)"),
     },
     async (input) => {
@@ -257,7 +265,7 @@ export function createServer(
     {
       task: z.string().describe("Description of the task to plan"),
       codebaseContext: z.string().optional().describe("Context about the codebase"),
-      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: modelSchema.optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
     },
     async (input) => {
       const start = Date.now();
@@ -345,7 +353,7 @@ export function createServer(
     {
       prompt: z.string().describe("Question or instruction about the image"),
       imageSource: z.string().describe("Image URL (HTTP/HTTPS), local file path, or base64 data URL"),
-      model: z.enum(["MiniMax-M3", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.5-highspeed", "MiniMax-M2.7-highspeed"]).optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
+      model: modelSchema.optional().describe("Model override (default: MINIMAX_DEFAULT_MODEL env var, typically M2.7)"),
     },
     async (input) => {
       const start = Date.now();
@@ -436,9 +444,9 @@ export function createServer(
     "Generate video using MiniMax Hailuo 2.3. Async: submits task, polls every 10s, retrieves download URL, optionally saves to file.",
     {
       prompt: z.string().describe("Text description of the video to generate"),
-      duration: z.number().optional().describe("Video duration in seconds: 6 or 10 (default: 6)"),
-      resolution: z.string().optional().describe("Resolution: '768P' or '1080P' (default: '1080P')"),
-      model: z.string().optional().describe("Model: 'MiniMax-Hailuo-2.3' or 'MiniMax-Hailuo-2.3-Fast' (default: 'MiniMax-Hailuo-2.3')"),
+      duration: z.union([z.literal(6), z.literal(10)]).optional().describe("Video duration in seconds: 6 or 10 (default: 6)"),
+      resolution: z.enum(["768P", "1080P"]).optional().describe("Resolution: '768P' or '1080P' (default: '1080P')"),
+      model: z.enum(["MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2.3-Fast"]).optional().describe("Video generation model (default: 'MiniMax-Hailuo-2.3')"),
       outputFile: z.string().optional().describe("Absolute file path to save the video (mp4)"),
     },
     async (input) => {
@@ -587,8 +595,12 @@ async function main() {
   await server.connect(transport);
 }
 
+export function shouldRunCli(args: string[]): boolean {
+  return args.length > 0;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  if (process.argv.includes("--init") || process.argv.includes("--end-session") || process.argv.includes("--savings-report")) {
+  if (shouldRunCli(process.argv.slice(2))) {
     import("./cli.js").catch((err) => {
       console.error("Failed to run CLI command:", err);
       process.exit(1);
